@@ -1,11 +1,34 @@
-// 分你一只耳机 · 授权页：YOU 用网易云 App 扫码，把登录态交给你自己的服务器。
-// 登录态只存在服务器数据目录里（见 docs/SECURITY.md），这个页面只负责扫码、看状态、退出。
+// 分你一只耳机 · 授权页
 import { apiRequest, API_BASE } from './lib/api.js';
 import { escapeHtml } from './lib/escape.js';
 
+const QR_POLL_MS = 2000;
+
+async function svgDataUriToPng(dataUri, size = 480) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = size; canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, size, size);
+        ctx.drawImage(img, 0, 0, size, size);
+        resolve(canvas.toDataURL('image/png'));
+      } catch (e) { reject(e); }
+    };
+    img.onerror = reject;
+    img.src = dataUri;
+  });
+}
+
 export function mountMusicLogin({ host }) {
+  const ctrl = new AbortController();
+  const signal = ctrl.signal;
   let poll = 0, alive = true;
-  const stop = () => { alive = false; clearTimeout(poll); };
+  const stop = () => { alive = false; ctrl.abort(); clearTimeout(poll); };
+
   async function render() {
     clearTimeout(poll);
     host.innerHTML = '<h1 class="oe-title">网易云登录</h1><p class="oe-sub">只用来听歌；登录态只存在你自己的服务器上</p><div data-body><p class="oe-help">读取中…</p></div>';
@@ -23,24 +46,87 @@ export function mountMusicLogin({ host }) {
       + '<button type="button" class="oe-btn is-go" data-qr>生成二维码</button></section><div data-qr-box></div>';
     body.querySelector('[data-qr]').addEventListener('click', startQr);
   }
+
   async function startQr() {
-    const box = host.querySelector('[data-qr-box]'); if (!box) return;
+    if (signal.aborted) return;
+    const box = host.querySelector('[data-qr-box]');
+    if (!box) return;
+
     box.innerHTML = '<p class="oe-help">生成中…</p>';
-    let q; try { q = await apiRequest(API_BASE + '/login/qr', { method: 'POST' }); } catch (e) { box.innerHTML = '<p class="oe-help">' + escapeHtml(e.message || '生成失败') + '</p>'; return; }
-    box.innerHTML = '<section class="oe-card" style="text-align:center"><img src="' + escapeHtml(q.qrImage) + '" alt="网易云登录二维码" class="oe-qr"><p class="oe-help" data-state>等你扫码</p></section>';
+
+    let q;
+    try {
+      q = await apiRequest(API_BASE + '/login/qr', { method: 'POST', signal });
+    } catch (e) {
+      if (signal.aborted) return;
+      box.innerHTML = `<p class="oe-help">${escapeHtml(e.message || '生成失败')}</p>`;
+      return;
+    }
+    if (signal.aborted) return;
+
+    const raw = q.qrImage || q.qrimg || q.qrUrl || '';
+    if (!raw) {
+      box.innerHTML = '<p class="oe-help">后端没返回二维码图片（qrImage 为空）</p>';
+      return;
+    }
+
+    box.innerHTML = `
+      <section class="oe-card" style="text-align:center">
+        <img alt="网易云登录二维码" width="260" height="260"
+             style="width:260px;height:260px;border-radius:8px;background:#fff;display:inline-block">
+        <p class="oe-help" data-state>加载中…</p>
+      </section>`;
+
+    const img = box.querySelector('img');
     const stateEl = box.querySelector('[data-state]');
-    const tick = async () => {
-      if (!alive) return;
+
+    img.onerror = () => {
+      stateEl.textContent = '二维码图片加载失败，请重新生成';
+      console.warn('[qr] img onerror, src prefix:', String(img.src).slice(0, 80));
+    };
+
+    const isSvg =
+      typeof raw === 'string' &&
+      (raw.startsWith('data:image/svg+xml') || raw.includes('<svg'));
+
+    if (!isSvg) {
+      img.src = raw;
+      stateEl.textContent = '等你扫码';
+    } else {
       try {
-        const r = await apiRequest(API_BASE + '/login/qr/' + encodeURIComponent(q.key));
+        img.src = await svgDataUriToPng(raw);
+        stateEl.textContent = '等你扫码';
+      } catch (e) {
+        console.warn('[qr] svg→png failed, fallback to svg', e);
+        img.src = raw;
+        stateEl.textContent = '等你扫码';
+      }
+    }
+
+    const tick = async () => {
+      if (signal.aborted) return;
+      try {
+        const r = await apiRequest(
+          API_BASE + '/login/qr/' + encodeURIComponent(q.key),
+          { signal }
+        );
+        if (signal.aborted) return;
+
         if (r.status === 'success') { render(); return; }
         if (r.status === 'expired') { stateEl.textContent = '过期了，再生成一张'; return; }
-        stateEl.textContent = r.status === 'scanned' ? '扫到了，在 App 里点确认' : '等你扫码';
-      } catch (e) { stateEl.textContent = (e && e.message) || '出错了，再生成一张试试'; return; }
-      poll = setTimeout(tick, 2000);
+        stateEl.textContent =
+          r.status === 'scanned' ? '扫到了，在 App 里点确认' : '等你扫码';
+      } catch (e) {
+        if (signal.aborted) return;
+        stateEl.textContent = (e && e.message) || '出错了，再生成一张试试';
+        return;
+      }
+      setTimeout(tick, QR_POLL_MS);
     };
-    poll = setTimeout(tick, 2000);
+
+    setTimeout(tick, QR_POLL_MS);
   }
+
   render();
   return stop;
 }
