@@ -1,90 +1,25 @@
-async function startQr() {
-  if (signal.aborted) return;
-  const box = host.querySelector('[data-qr-box]');
-  if (!box) return;
-
-  box.innerHTML = '<p class="oe-help">生成中…</p>';
-
-  let q;
-  try {
-    q = await apiRequest(API_BASE + '/login/qr', { method: 'POST', signal });
-  } catch (e) {
-    if (signal.aborted) return;
-    box.innerHTML = `<p class="oe-help">${escapeHtml(e.message || '生成失败')}</p>`;
+<!doctype html><html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>分你一只耳机 · 网易云登录</title>
+<style>
+body{margin:0;background:#f6f3f7;color:#2b2830;font-family:"Songti SC","Noto Serif SC",serif}
+main{max-width:460px;margin:0 auto;padding:28px 18px}
+.oe-title{font-size:22px;margin:0 0 4px}.oe-sub{color:#8f8a95;font-size:13px;margin:0 0 18px}
+.oe-card{background:#fff;border-radius:18px;padding:16px;margin-bottom:12px}
+.oe-label{font-size:13px;color:#8f8a95;margin-bottom:6px}
+.oe-help{font-size:13px;line-height:1.7;color:#6b6670}
+.oe-btn{border:0;border-radius:999px;padding:10px 18px;background:#f0ecf3;color:#2b2830;font:inherit;font-size:14px}
+.oe-btn.is-go{background:#d995ad;color:#fff}
+input{width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font:inherit;box-sizing:border-box}
+</style></head><body><main id="app"></main>
+<script type="module">
+import { mountMusicLogin } from './login.js';
+(function(){
+  var m = location.search.match(/[?&]token=([^&]+)/);
+  if (m) localStorage.setItem('one-earbud.token', decodeURIComponent(m[1]));
+  if (!localStorage.getItem('one-earbud.token')) {
+    document.getElementById('app').innerHTML = '<h1 class="oe-title">输入口令</h1><div class="oe-card"><input id="t" placeholder="ONE_EARBUD_TOKEN" type="password"><br><br><button class="oe-btn is-go" onclick="localStorage.setItem(\'one-earbud.token\',document.getElementById(\'t\').value);location.reload()">登录</button></div>';
     return;
   }
-  if (signal.aborted) return;
-
-  // 关键字段兼容：qrImage / qrimg / qrUrl
-  const raw = q.qrImage || q.qrimg || q.qrUrl || '';
-  if (!raw) {
-    box.innerHTML = '<p class="oe-help">后端没返回二维码图片（qrImage 为空），请检查 /login/qr 是否传了 qrimg=true</p>';
-    return;
-  }
-
-  box.innerHTML = `
-    <section class="oe-card" style="text-align:center">
-      <img alt="网易云登录二维码" width="260" height="260"
-           style="width:260px;height:260px;border-radius:8px;background:#fff;display:inline-block">
-      <p class="oe-help" data-state>加载中…</p>
-    </section>`;
-
-  const img = box.querySelector('img');
-  const stateEl = box.querySelector('[data-state]');
-
-  // 图片加载失败时给出明确提示
-  img.onerror = () => {
-    stateEl.textContent = '二维码图片加载失败，请重新生成';
-    console.warn('[qr] img onerror, src prefix:', String(img.src).slice(0, 80));
-  };
-
-  const isSvg =
-    typeof raw === 'string' &&
-    (raw.startsWith('data:image/svg+xml') || raw.includes('<svg'));
-
-  // 已经是 PNG/JPEG 等 → 直接用，不要再转
-  if (!isSvg) {
-    img.src = raw;
-    stateEl.textContent = '等你扫码';
-  } else {
-    // 只有 SVG 才尝试转 PNG（方便手机长按存相册）
-    try {
-      img.src = await svgDataUriToPng(raw);
-      stateEl.textContent = '等你扫码';
-    } catch (e) {
-      console.warn('[qr] svg→png failed, fallback to svg', e);
-      img.src = raw; // 回退原 SVG
-      stateEl.textContent = '等你扫码';
-    }
-  }
-
-  // —— 轮询逻辑保持不变 ——
-  const tick = async () => {
-    if (signal.aborted) return;
-    try {
-      const r = await apiRequest(
-        API_BASE + '/login/qr/' + encodeURIComponent(q.key),
-        { signal }
-      );
-      if (signal.aborted) return;
-
-      if (r.status === 'success') {
-        render();
-        return;
-      }
-      if (r.status === 'expired') {
-        stateEl.textContent = '过期了，再生成一张';
-        return;
-      }
-      stateEl.textContent =
-        r.status === 'scanned' ? '扫到了，在 App 里点确认' : '等你扫码';
-    } catch (e) {
-      if (signal.aborted) return;
-      stateEl.textContent = (e && e.message) || '出错了，再生成一张试试';
-      return;
-    }
-    setTimeout(tick, QR_POLL_MS);
-  };
-
-  setTimeout(tick, QR_POLL_MS);
-}
+  mountMusicLogin({ host: document.getElementById('app') });
+})();
+</script>
+</body></html>
