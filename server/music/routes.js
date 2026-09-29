@@ -34,6 +34,7 @@ function mountMusicRoutes(router, authority) {
     nostore(res); if (!guard(res)) return;
     try { const r = await authority.playUrl(String(req.params.id || '')); res.json({ ok: true, url: r.url, trial: r.trial }); } catch (e) { sendError(res, e, 'url'); }
   });
+  router.get('/music/now-playing', (req, res) => { nostore(res); if (!guard(res)) return; const np = authority.nowPlaying(); res.json(Object.assign({ ok: true }, np ? { listening: true, state: np.state, songId: np.songId, title: np.title, artist: np.artist, positionMs: np.positionMs, durationMs: np.durationMs } : { listening: false })); });
   router.post('/music/now-playing', (req, res) => {
     nostore(res); if (!guard(res)) return;
     const ok = authority.reportNowPlaying(req.body || {});
