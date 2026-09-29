@@ -1,150 +1,85 @@
-import express from "express";
-import { randomUUID } from "crypto";
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { ListToolsRequestSchema, CallToolRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+// 分你一只耳机 · 授权页
+import { apiRequest, API_BASE } from './lib/api.js';
+import { escapeHtml } from './lib/escape.js';
 
-const MUSIC_BASE = process.env.MUSIC_BASE || "https://one-earbud.onrender.com/api/music";
-const MUSIC_TOKEN = process.env.MUSIC_TOKEN || "myearbud123";
-const FETCH_TIMEOUT_MS = 15000;
+const QR_POLL_MS = 2000;
 
-async function musicFetch(path, options = {}) {
+async function svgDataUriToPng(dataUri, size = 480) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = size; canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, size, size);
+        ctx.drawImage(img, 0, 0, size, size);
+        resolve(canvas.toDataURL('image/png'));
+      } catch (e) { reject(e); }
+    };
+    img.onerror = reject;
+    img.src = dataUri;
+  });
+}
+
+export function mountMusicLogin({ host }) {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const r = await fetch(`${MUSIC_BASE}${path}`, {
-      ...options,
-      headers: {
-        "Authorization": MUSIC_TOKEN,
-        ...(options.body ? { "Content-Type": "application/json" } : {}),
-        ...(options.headers || {}),
-      },
-      signal: ctrl.signal,
-    });
-    const text = await r.text();
-    let data; try { data = JSON.parse(text); } catch { data = { raw: text.slice(0, 500) }; }
-    if (!r.ok) throw new Error(data.message || data.error || `HTTP ${r.status}`);
-    return data;
-  } finally { clearTimeout(timer); }
-}
+  const signal = ctrl.signal;
+  let poll = 0, alive = true;
+  const stop = () => { alive = false; ctrl.abort(); clearTimeout(poll); };
 
-function createServer() {
-  const server = new Server(
-    { name: "image-render", version: "1.6.0" },
-    { capabilities: { tools: {} } }
-  );
-
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [
-      {
-        name: "render_image",
-        description: "加载网络表情包图片并在对话中显示",
-        inputSchema: {
-          type: "object",
-          properties: {
-            imageUrl: { type: "string" },
-            width: { type: "number" },
-            borderRadius: { type: "number" }
-          },
-          required: ["imageUrl"]
-        }
-      },
-      {
-        name: "music_tool",
-        description: "和用户一起听网易云。actions: now_playing(看用户在听啥,无参数)、search(搜歌,需 query)、lyrics(读歌词,需 songId)、queue(看列表)、play_next(把歌排到当前这首后面,需 songId/name/artist)、play_now(直接给用户放,需 songId/name/artist)、queue_add(加到列表最后,需 songId/name/artist)。可选 note 是给用户的一句话≤300字。",
-        inputSchema: {
-          type: "object",
-          properties: {
-            action: {
-              type: "string",
-              enum: ["now_playing", "search", "lyrics", "queue", "play_next", "play_now", "queue_add"]
-            },
-            songId: { type: "number" },
-            query: { type: "string" },
-            name: { type: "string", description: "歌曲名（排歌时用）" },
-            artist: { type: "string", description: "歌手名（排歌时用）" },
-            note: { type: "string" }
-          },
-          required: ["action"]
-        }
-      }
-    ]
-  }));
-
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const name = request.params.name;
-    const args = request.params.arguments || {};
-
-    if (name === "render_image") {
-      const { imageUrl, width = 160, borderRadius = 12 } = args;
-      try {
-        const resp = await fetch(imageUrl);
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const buf = Buffer.from(await resp.arrayBuffer());
-        const mimeType = resp.headers.get("content-type") || "image/png";
-        return { content: [{ type: "image", data: buf.toString("base64"), mimeType }] };
-      } catch (e) {
-        return { content: [{ type: "text", text: `图片加载失败: ${e.message}` }] };
-      }
+  async function render() {
+    clearTimeout(poll);
+    host.innerHTML = '<h1 class="oe-title">网易云登录</h1><p class="oe-sub">只用来听歌；登录态只存在你自己的服务器上</p><div data-body><p class="oe-help">读取中…</p></div>';
+    const body = host.querySelector('[data-body]');
+    let st; try { st = await apiRequest(API_BASE + '/status'); } catch (e) { body.innerHTML = '<p class="oe-help">' + escapeHtml(e.message || '读不到状态') + '</p>'; return; }
+    if (!alive) return;
+    if (st.connected) {
+      const p = st.profile || {};
+      body.innerHTML = '<section class="oe-card"><div class="oe-label">已连上网易云</div><div class="oe-value">' + escapeHtml(p.nickname || '') + (st.vip ? ' · 会员' : '') + '</div>'
+        + '<p class="oe-help">回到聊天页，打开听歌入口就能搜歌、放歌。</p><button type="button" class="oe-btn" data-logout>退出登录</button></section>';
+      body.querySelector('[data-logout]').addEventListener('click', async () => { if (!confirm('退出网易云登录？')) return; await apiRequest(API_BASE + '/logout', { method: 'POST' }).catch(() => {}); render(); });
+      return;
     }
-
-    if (name === "music_tool") {
-      try {
-        const { action } = args;
-        let result;
-        if (action === "now_playing") result = await musicFetch("/now-playing");
-        else if (action === "search") result = await musicFetch(`/search?q=${encodeURIComponent(args.query || "")}&limit=10`);
-        else if (action === "lyrics") result = await musicFetch(`/song/${args.songId}`);
-        else if (action === "queue") result = await musicFetch("/queue");
-        else if (action === "play_next") result = await musicFetch("/queue/next", { method: "POST", body: JSON.stringify({ song: { id: String(args.songId), name: args.name || "", artist: args.artist || "" } }) });
-        else if (action === "play_now") result = await musicFetch("/queue/now", { method: "POST", body: JSON.stringify({ song: { id: String(args.songId), name: args.name || "", artist: args.artist || "" } }) });
-        else if (action === "queue_add") result = await musicFetch("/queue/append", { method: "POST", body: JSON.stringify({ songs: [{ id: String(args.songId), name: args.name || "", artist: args.artist || "" }] }) });
-        else return { content: [{ type: "text", text: "unknown action: " + action }], isError: true };
-        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-      } catch (e) {
-        return { content: [{ type: "text", text: `音乐接口错误: ${e.message}` }], isError: true };
-      }
-    }
-
-    return { content: [{ type: "text", text: "unknown tool: " + name }], isError: true };
-  });
-
-  return server;
-}
-
-const app = express();
-app.use(express.json({ limit: "2mb" }));
-const sessions = new Map();
-
-async function handleNewConnection(req, res) {
-  const server = createServer();
-  const transport = new StreamableHTTPServerTransport({
-    sessionIdGenerator: () => randomUUID(),
-    onsessioninitialized: (sid) => {
-      sessions.set(sid, { transport, server });
-      console.log("new session:", sid, "| total:", sessions.size);
-    },
-  });
-  await server.connect(transport);
-  transport.onclose = () => {
-    if (transport.sessionId) sessions.delete(transport.sessionId);
-  };
-  await transport.handleRequest(req, res, req.body);
-}
-
-app.post("/", async (req, res) => {
-  try {
-    const sessionId = req.headers["mcp-session-id"];
-    const session = sessionId ? sessions.get(sessionId) : undefined;
-    if (session) await session.transport.handleRequest(req, res, req.body);
-    else await handleNewConnection(req, res);
-  } catch (e) {
-    console.error("POST error:", e);
-    if (!res.headersSent) res.status(500).json({ jsonrpc: "2.0", error: { message: e.message } });
+    body.innerHTML = '<section class="oe-card"><div class="oe-label">还没连上网易云</div><p class="oe-help">用网易云 App 扫一下码。二维码三分钟内有效；在同一台手机上：长按二维码存进相册，再在网易云 App 的扫一扫里选相册。</p>'
+      + '<button type="button" class="oe-btn is-go" data-qr>生成二维码</button></section><div data-qr-box></div>';
+    body.querySelector('[data-qr]').addEventListener('click', startQr);
   }
-});
 
-app.get("/", (_req, res) => res.send("MCP v1.6"));
-app.get("/health", (_req, res) => res.json({ ok: true, version: "1.6.0" }));
-
-app.listen(process.env.PORT || 3000, "0.0.0.0", () => console.log("✅ MCP v1.6"));
+  async function startQr() {
+    if (signal.aborted) return;
+    const box = host.querySelector('[data-qr-box]');
+    if (!box) return;
+    box.innerHTML = '<p class="oe-help">生成中…</p>';
+    let q;
+    try { q = await apiRequest(API_BASE + '/login/qr', { method: 'POST', signal }); }
+    catch (e) { if (signal.aborted) return; box.innerHTML = `<p class="oe-help">${escapeHtml(e.message || '生成失败')}</p>`; return; }
+    if (signal.aborted) return;
+    const raw = q.qrImage || q.qrimg || q.qrUrl || '';
+    if (!raw) { box.innerHTML = '<p class="oe-help">后端没返回二维码图片</p>'; return; }
+    box.innerHTML = `<section class="oe-card" style="text-align:center"><img alt="网易云登录二维码" style="width:260px;height:260px;border-radius:8px;background:#fff"><p class="oe-help" data-state>加载中…</p></section>`;
+    const img = box.querySelector('img');
+    const stateEl = box.querySelector('[data-state]');
+    const isSvg = typeof raw === 'string' && (raw.startsWith('data:image/svg+xml') || raw.includes('<svg'));
+    if (!isSvg) { img.src = raw; stateEl.textContent = '等你扫码'; }
+    else {
+      try { img.src = await svgDataUriToPng(raw); stateEl.textContent = '等你扫码'; }
+      catch (e) { img.src = raw; stateEl.textContent = '等你扫码'; }
+    }
+    const tick = async () => {
+      if (signal.aborted) return;
+      try {
+        const r = await apiRequest(API_BASE + '/login/qr/' + encodeURIComponent(q.key), { signal });
+        if (signal.aborted) return;
+        if (r.status === 'success') { render(); return; }
+        if (r.status === 'expired') { stateEl.textContent = '过期了，再生成一张'; return; }
+        stateEl.textContent = r.status === 'scanned' ? '扫到了，在 App 里点确认' : '等你扫码';
+      } catch (e) { if (signal.aborted) return; stateEl.textContent = (e && e.message) || '出错了'; return; }
+      setTimeout(tick, QR_POLL_MS);
+    };
+    setTimeout(tick, QR_POLL_MS);
+  }
+  render();
+  return stop;
+}
