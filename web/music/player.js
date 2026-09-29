@@ -11,6 +11,7 @@ const state = {
   lyrics: [],        // [{ index, timeMs, text, trans }]
   playing: false,
   loading: false,
+  buffering: false,  // 调了 play() 但还没出声（缓冲/网卡）；真出声那一刻才撤
   error: '',
   closed: true,
   queueItemId: null  // 在放的是播放列表里的哪一项；从卡片点开的单曲是 null，放完就停
@@ -79,20 +80,27 @@ function ensureAudio() {
   audio.setAttribute('playsinline', '');
   audio.style.display = 'none';
   document.body.appendChild(audio);
-  audio.addEventListener('play', () => { state.playing = true; state.error = ''; skipRun = 0; report(); emit(); fillDetail(); });
-  audio.addEventListener('pause', () => { state.playing = false; report(); emit(); });
+  audio.addEventListener('play', () => { state.playing = true; state.buffering = true; state.error = ''; skipRun = 0; report(); emit(); fillDetail(); });
+  // 真出声了才算在放，这时候才撤加载中、才跟服务器说在听
+  audio.addEventListener('playing', () => { if (state.buffering) { state.buffering = false; report(); emit(); } });
+  audio.addEventListener('waiting', () => { if (!audio.paused && !state.buffering) { state.buffering = true; report(); emit(); } });
+  audio.addEventListener('pause', () => { state.playing = false; state.buffering = false; report(); emit(); });
   audio.addEventListener('ended', () => {
-    state.playing = false; report(); emit();
+    state.playing = false; state.buffering = false; report(); emit();
     // 试听版之类本来就短的，以 audio 自己的时长为准；同一首只救一次，免得来回转圈
     const meta = (state.song && state.song.durationMs) || 0, own = Number.isFinite(audio.duration) ? audio.duration * 1000 : meta;
     const d = Math.min(meta || own, own || meta), at = positionMs(), key = state.song && state.song.songId;
     if (d > 0 && at < d - 5000 && rescuedEnd !== key) { rescuedEnd = key; recover({ play: true }); return; }
     if (state.queueItemId) next({ auto:true });
   });
-  audio.addEventListener('timeupdate', () => { emit('time'); maybePrefetch(); });
+  audio.addEventListener('timeupdate', () => {
+    // 保险：有的时候 playing 事件漏了，进度真在走就当已经出声
+    if (state.buffering && !audio.paused && audio.readyState >= 3 && audio.currentTime > 0) { state.buffering = false; report(); emit(); }
+    emit('time'); maybePrefetch();
+  });
   audio.addEventListener('seeked', () => { report(); emit(); });
   audio.addEventListener('loadedmetadata', () => { report(); emit(); });
-  audio.addEventListener('error', () => { if (state.song && !state.loading) recover({ play: wantPlay }); });
+  audio.addEventListener('error', () => { state.buffering = false; if (state.song && !state.loading) recover({ play: wantPlay }); });
   return audio;
 }
 
@@ -111,10 +119,10 @@ export function durationMs() {
 
 function report() {
   if (!state.song || state.closed) return;
-  const body = { songId: state.song.songId, title: state.song.title, artist: state.song.artist, positionMs: positionMs(), durationMs: durationMs(), playing: state.playing };
+  const body = { songId: state.song.songId, title: state.song.title, artist: state.song.artist, positionMs: positionMs(), durationMs: durationMs(), playing: state.playing && !state.buffering };
   apiRequest(API_BASE + '/now-playing', { method: 'POST', body }).catch(() => {});
   clearInterval(heartbeat);
-  if (state.playing) heartbeat = setInterval(report, HEARTBEAT_MS);
+  if (state.playing && !state.buffering) heartbeat = setInterval(report, HEARTBEAT_MS);
 }
 
 async function loadUrl(songId) {
@@ -241,7 +249,7 @@ export function close() {
   wantPlay = false;
   if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load(); }
   clearInterval(heartbeat);
-  state.song = null; state.lyrics = []; state.playing = false; state.closed = true; state.error = '';
+  state.song = null; state.lyrics = []; state.playing = false; state.buffering = false; state.closed = true; state.error = '';
   prefetched = null; prefetchFor = null; saveLast();
   apiRequest(API_BASE + '/now-playing', { method: 'DELETE' }).catch(() => {});
   emit();

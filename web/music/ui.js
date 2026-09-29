@@ -62,7 +62,7 @@ export function createMiniBar({ onOpen, onList, onShareSong }) {
     if (kind === 'time') return;
     $('.mm-disc').setAttribute('style', bg(st.song.coverUrl));
     $('.mm-title').textContent = st.song.title || '…';
-    $('.mm-sub').textContent = st.error ? st.error : (st.song.artist || '') + (st.loading ? ' · 加载中' : '');
+    $('.mm-sub').textContent = st.error ? st.error : (st.song.artist || '') + (st.loading || st.buffering ? ' · 加载中' : '');
     const ppNow = st.playing ? 'pause' : 'play';
     if ($('.mm-pp').dataset.icon !== ppNow) { $('.mm-pp').dataset.icon = ppNow; $('.mm-pp').innerHTML = ICON[ppNow]; }
     el.classList.toggle('is-playing', st.playing);
@@ -124,7 +124,7 @@ export function openPlayerSheet({ onShareSong, onShareLines, onNeedLogin }) {
       if (cur && !picking) linesEl.scrollTo({ top: cur.offsetTop - linesEl.clientHeight * 0.42, behavior: 'smooth' });
     }
     if (kind === 'time') return;
-    $('.ms-title').textContent = st.song.title || '…'; $('.ms-artist').textContent = st.song.artist || '';
+    $('.ms-title').textContent = st.song.title || '…'; $('.ms-artist').textContent = (st.song.artist || '') + (st.loading || st.buffering ? ' · 加载中' : '');
     paintK();
     $('[data-pp]').innerHTML = st.playing ? ICON.pause : ICON.play;
     $('.music-note').textContent = st.error || '';
