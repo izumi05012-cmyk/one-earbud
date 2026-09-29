@@ -9,6 +9,18 @@ main{max-width:460px;margin:0 auto;padding:28px 18px}
 .oe-btn{border:0;border-radius:999px;padding:10px 18px;background:#f0ecf3;color:#2b2830;font:inherit;font-size:14px}
 .oe-btn.is-go{background:#d995ad;color:#fff}
 .oe-qr{width:220px;height:220px;image-rendering:pixelated;background:#fff;border-radius:12px;padding:8px}
+input{width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font:inherit;box-sizing:border-box}
 </style></head><body><main id="app"></main>
-<script type="module">import { mountMusicLogin } from './login.js'; mountMusicLogin({ host: document.getElementById('app') });</script>
+<script>
+// 支持网址 ?token=xxx 直接写入 localStorage
+(function(){
+  var m = location.search.match(/[?&]token=([^&]+)/);
+  if (m) localStorage.setItem('one-earbud.token', decodeURIComponent(m[1]));
+  if (!localStorage.getItem('one-earbud.token')) {
+    document.getElementById('app').innerHTML = '<h1 class="oe-title">输入口令</h1><div class="oe-card"><input id="t" placeholder="ONE_EARBUD_TOKEN" type="password"><br><br><button class="oe-btn is-go" onclick="localStorage.setItem(\'one-earbud.token\',document.getElementById(\'t\').value);location.reload()">登录</button></div>';
+    return;
+  }
+  var s=document.createElement('script'); s.type='module'; s.src='./login.js'; document.body.appendChild(s);
+})();
+</script>
 </body></html>
