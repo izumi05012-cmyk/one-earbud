@@ -1,0 +1,372 @@
+// one-earbud 听歌 · 全局播放器。
+// 单例：audio 元素挂在 body 上，路由切换不销毁，所以换页歌不停。
+// 状态变化立刻报给服务器（「YOU正在听」），在放的时候每 20 秒心跳一次；关掉就清空。
+// PWA 退后台放不了，心跳自然会断，服务器 60 秒后当YOU不在听。
+import { apiRequest, API_BASE } from '../lib/api.js';
+
+const HEARTBEAT_MS = 20000;
+
+const state = {
+  song: null,        // { songId, title, artist, album, coverUrl, durationMs }
+  lyrics: [],        // [{ index, timeMs, text, trans }]
+  playing: false,
+  loading: false,
+  error: '',
+  closed: true,
+  queueItemId: null  // 在放的是播放列表里的哪一项；从卡片点开的单曲是 null，放完就停
+};
+const listeners = new Set();
+let audio = null;
+let heartbeat = 0;
+let urlFetchedAt = 0;
+// 下一首提前备好：快放完时先把下一首的详情和地址要回来，
+// 这首一停直接换上，不再「放完才去问服务器」。
+const PREFETCH_BEFORE_MS = 25000;
+let prefetched = null;   // { itemId, songId, detail, url, at }
+let prefetchFor = null;  // 这一首已经起过预取了，别每次 timeupdate 都起
+// 退出 PWA 再进来，听歌栏还在：只记在放哪首、是列表里哪一项；不记听到哪儿。
+// 只有点听歌栏上的 × 才算真的不听了，那时候才清掉。
+const LAST_KEY = 'one-earbud.last';
+function saveLast() {
+  try {
+    if (!state.song || state.closed) { localStorage.removeItem(LAST_KEY); return; }
+    const s = state.song;
+    localStorage.setItem(LAST_KEY, JSON.stringify({ song: { songId: s.songId, title: s.title, artist: s.artist, coverUrl: s.coverUrl, durationMs: s.durationMs }, queueItemId: state.queueItemId || null }));
+  } catch (_) {}
+}
+function restoreLast() {
+  try {
+    const v = JSON.parse(localStorage.getItem(LAST_KEY) || 'null');
+    if (!v || !v.song || !/^\d+$/.test(String(v.song.songId || ''))) return;
+    state.song = v.song; state.queueItemId = v.queueItemId || null;
+    state.closed = false; state.playing = false;
+    // 苹果不许网页自己出声：栏以暂停的样子出现，YOU点播放就从头放这一首
+  } catch (_) {}
+}
+restoreLast();
+let stallT = -1, stallSince = 0, stallTries = 0;
+if (typeof window !== 'undefined') setInterval(() => {
+  if (!audio || !state.song || audio.paused || state.loading) { stallSince = 0; return; }
+  const t = audio.currentTime;
+  if (t !== stallT) { stallT = t; stallSince = Date.now(); stallTries = 0; return; }
+  if (stallSince && Date.now() - stallSince > 8000 && stallTries < 2) { stallTries++; stallSince = Date.now(); recover({ play: true }); }
+}, 2000);
+if (typeof window !== 'undefined') window.addEventListener('online', () => { if (state.song && state.error) { state.error = ''; emit(); if (audio && audio.getAttribute('src')) recover(); } fillDetail(); });
+// 苹果只认手势里同步调用的 play()：要是点了才去服务器拿地址，拿回来已经不算YOU点的了，就会被拦。
+// 所以恢复出来的这首先把地址备好，挂在 audio 上但不放。
+async function warmRestored() {
+  if (!state.song || state.closed || (audio && audio.getAttribute('src'))) return;
+  const songId = state.song.songId;
+  try {
+    const [detail, url] = await Promise.all([apiRequest(API_BASE + '/song/' + encodeURIComponent(songId)).then(r => r.song), loadUrl(songId)]);
+    if (!state.song || state.song.songId !== songId || (audio && audio.getAttribute('src'))) return;
+    ensureAudio();
+    state.song = { songId, title: detail.title, artist: detail.artist, album: detail.album, coverUrl: detail.coverUrl, durationMs: detail.durationMs };
+    state.lyrics = Array.isArray(detail.lyrics) ? detail.lyrics : [];
+    audio.src = url; urlFetchedAt = Date.now();
+    emit();
+  } catch (_) {}
+}
+if (typeof document !== 'undefined' && state.song) {
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { warmRestored(); }, { once: true });
+  else setTimeout(() => { warmRestored(); }, 0);
+}
+
+function ensureAudio() {
+  if (audio) return audio;
+  audio = document.createElement('audio');
+  audio.preload = 'auto';
+  audio.setAttribute('playsinline', '');
+  audio.style.display = 'none';
+  document.body.appendChild(audio);
+  audio.addEventListener('play', () => { state.playing = true; state.error = ''; skipRun = 0; report(); emit(); fillDetail(); });
+  audio.addEventListener('pause', () => { state.playing = false; report(); emit(); });
+  audio.addEventListener('ended', () => {
+    state.playing = false; report(); emit();
+    // 试听版之类本来就短的，以 audio 自己的时长为准；同一首只救一次，免得来回转圈
+    const meta = (state.song && state.song.durationMs) || 0, own = Number.isFinite(audio.duration) ? audio.duration * 1000 : meta;
+    const d = Math.min(meta || own, own || meta), at = positionMs(), key = state.song && state.song.songId;
+    if (d > 0 && at < d - 5000 && rescuedEnd !== key) { rescuedEnd = key; recover({ play: true }); return; }
+    if (state.queueItemId) next({ auto:true });
+  });
+  audio.addEventListener('timeupdate', () => { emit('time'); maybePrefetch(); });
+  audio.addEventListener('seeked', () => { report(); emit(); });
+  audio.addEventListener('loadedmetadata', () => { report(); emit(); });
+  audio.addEventListener('error', () => { if (state.song && !state.loading) recover({ play: wantPlay }); });
+  return audio;
+}
+
+function emit(kind) { listeners.forEach(fn => { try { fn(state, kind || 'state'); } catch (_) {} }); }
+
+export function subscribe(fn) { listeners.add(fn); fn(state, 'state'); return () => listeners.delete(fn); }
+export function getState() { return state; }
+export function positionMs() { return audio ? Math.round((audio.currentTime || 0) * 1000) : 0; }
+// 以歌曲详情里的时长为准：一边加载一边跳到中间时，audio.duration 会先报出一个错的值
+// 。详情没有时长才用 audio 的。
+export function durationMs() {
+  const fromSong = state.song && Number(state.song.durationMs) > 0 ? Number(state.song.durationMs) : 0;
+  const fromAudio = audio && Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration * 1000 : 0;
+  return Math.round(fromSong || fromAudio || 0);
+}
+
+function report() {
+  if (!state.song || state.closed) return;
+  const body = { songId: state.song.songId, title: state.song.title, artist: state.song.artist, positionMs: positionMs(), durationMs: durationMs(), playing: state.playing };
+  apiRequest(API_BASE + '/now-playing', { method: 'POST', body }).catch(() => {});
+  clearInterval(heartbeat);
+  if (state.playing) heartbeat = setInterval(report, HEARTBEAT_MS);
+}
+
+async function loadUrl(songId) {
+  const r = await apiRequest(API_BASE + '/song/' + encodeURIComponent(songId) + '/url');
+  urlFetchedAt = Date.now();
+  return r.url;
+}
+
+// 播放地址过期或断流：重新取地址，从原位置接着放
+// 网络请求别无限等：超过这个时间当作网慢，给YOU一句话和能按的播放键，而不是一直「加载中」
+function withTimeout(p, ms) { return Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]); }
+function isUnavailable(e) { return !!e && (e.code === 'MUSIC_UNAVAILABLE' || e.message === 'MUSIC_UNAVAILABLE'); }
+function netMsg(e, fallback) {
+  if (e && e.message === 'timeout') return '网络有点慢，点播放再试';
+  if (isUnavailable(e)) return '这首网易云放不了';
+  if (e && /^[A-Z_]+$/.test(String(e.message || ''))) return fallback; // 别把错误代码直接给她看
+  const m = String((e && e.message) || '');
+  if (!m || /load failed|failed to fetch|network|networkerror|aborted/i.test(m)) return '网断了一下，点播放再试';
+  return m || fallback;
+}
+let skipRun = 0; // 连着跳过了几首放不了的
+let rescuedEnd = null; // 这首已经救过一次「假结束」了
+let needDetail = false; // 这首的歌词/详情没拿到（网断了），能放了再补
+async function fillDetail() {
+  if (!state.song || !needDetail) return;
+  const songId = state.song.songId;
+  try {
+    const d = await apiRequest(API_BASE + '/song/' + encodeURIComponent(songId)).then(r => r.song);
+    if (!state.song || state.song.songId !== songId) return;
+    needDetail = false;
+    state.song = { songId, title: d.title, artist: d.artist, album: d.album, coverUrl: d.coverUrl, durationMs: d.durationMs };
+    state.lyrics = Array.isArray(d.lyrics) ? d.lyrics : [];
+    saveLast(); emit();
+  } catch (_) {}
+}
+// 地址过期/卡住时重新拿地址接着放。拿地址限时；「加载中」只管拿地址这一段，
+// 不再等 audio.play()——苹果在网不好时那个 promise 可能一直不回，之前就是这样一直转圈
+let recovering = null;
+let wantPlay = false; // YOU想让它响着（点了播放、或正在自动接歌）；YOU点暂停/关掉才是 false
+function recover(opts) {
+  if (!state.song) return Promise.resolve();
+  if (recovering) return recovering;
+  const songId = state.song.songId;
+  const at = positionMs(); const wasPlaying = state.playing || !!(opts && opts.play);
+  recovering = (async () => {
+    try {
+      state.loading = true; emit();
+      const url = await withTimeout(loadUrl(songId), 10000);
+      if (!state.song || state.song.songId !== songId) return;
+      audio.src = url; urlFetchedAt = Date.now();
+      try { audio.currentTime = at / 1000; } catch (_) {}
+    } catch (e) { state.error = netMsg(e, '这首歌现在放不了'); state.loading = false; emit(); return; }
+    state.loading = false; emit();
+    if (wasPlaying) audio.play().catch(() => { state.error = '点一下播放键开始'; emit(); });
+  })().finally(() => { recovering = null; });
+  return recovering;
+}
+
+// song：至少要 songId；有 title/artist 先显示，详情和歌词随后补齐
+export async function play(song, atMs) {
+  ensureAudio(); wantPlay = true;
+  const songId = String(song && song.songId || '');
+  if (!/^\d+$/.test(songId)) return;
+  const same = !!(state.song && state.song.songId === songId && audio.getAttribute('src'));
+  state.closed = false; state.error = '';
+  if (!same) {
+    state.song = { songId, title: song.title || '', artist: song.artist || '', coverUrl: song.coverUrl || '', durationMs: song.durationMs || 0 };
+    state.lyrics = [];
+    state.loading = true; emit();
+    try {
+      const ready = prefetched && prefetched.songId === songId && Date.now() - prefetched.at < 10 * 60 * 1000 ? prefetched : null;
+      prefetched = null;
+      const [detail, url] = ready ? [ready.detail, ready.url] : await withTimeout(Promise.all([
+        apiRequest(API_BASE + '/song/' + encodeURIComponent(songId)).then(r => r.song).catch(() => null),
+        loadUrl(songId)
+      ]), 12000);
+      needDetail = !detail;
+      if (ready) urlFetchedAt = ready.at;
+      if (!state.song || state.song.songId !== songId) return; // 等待期间又换了歌
+      if (detail) { state.song = { songId, title: detail.title, artist: detail.artist, album: detail.album, coverUrl: detail.coverUrl, durationMs: detail.durationMs }; state.lyrics = Array.isArray(detail.lyrics) ? detail.lyrics : []; }
+      audio.src = url;
+      saveLast();
+    } catch (e) {
+      state.error = netMsg(e, '这首歌现在放不了');
+      state.loading = false;
+      // 上一首的音频还挂着：清掉，不然YOU点播放响的是上一首
+      if (audio.getAttribute('src')) { audio.pause(); audio.removeAttribute('src'); audio.load(); }
+      emit();
+      // 在列表里、这首网易云放不了：像网易云一样跳到下一首，连着跳最多 5 首
+      if (isUnavailable(e) && state.queueItemId && skipRun < 5) {
+        skipRun++; state.error = '这首网易云放不了，跳过了'; emit();
+        setTimeout(() => { if (state.song && state.song.songId === songId) next({ auto: true, skip: true }); }, 1200);
+      }
+      return;
+    }
+    state.loading = false;
+  } else if (Date.now() - urlFetchedAt > 15 * 60 * 1000) {
+    audio.src = await loadUrl(songId).catch(() => audio.src);
+  }
+  if (Number.isFinite(atMs)) audio.currentTime = Math.max(0, atMs) / 1000;
+  try { await audio.play(); } catch (e) { state.error = '点一下播放键开始'; }
+  emit();
+}
+
+export function toggle() {
+  if (!state.song) return;
+  wantPlay = !!(audio && audio.paused) || !audio || !audio.getAttribute('src');
+  if (!audio || !audio.getAttribute('src')) { play(state.song, 0); return; }
+  if (audio.paused) {
+    // 地址放久了可能过期：先在YOU这一下里同步 play()（让苹果认这个播放器），再换新地址接着放
+    if (Date.now() - urlFetchedAt > 15 * 60 * 1000) { audio.play().catch(() => {}); recover({ play: true }); return; }
+    audio.play().catch(() => { state.error = '点一下播放键开始'; emit(); });
+  } else audio.pause();
+}
+
+export function seek(ms) {
+  if (!audio || !state.song) return;
+  audio.currentTime = Math.max(0, Math.min(durationMs(), ms)) / 1000;
+  emit('time');
+}
+
+// 关掉播放条：停、清空，服务器那边也清空（TA这边就不再看到「正在听」）
+export function close() {
+  wantPlay = false;
+  if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load(); }
+  clearInterval(heartbeat);
+  state.song = null; state.lyrics = []; state.playing = false; state.closed = true; state.error = '';
+  prefetched = null; prefetchFor = null; saveLast();
+  apiRequest(API_BASE + '/now-playing', { method: 'DELETE' }).catch(() => {});
+  emit();
+}
+
+export function currentLineIndex() {
+  const p = positionMs() + 300; let k = -1;
+  for (let i = 0; i < state.lyrics.length; i++) { if (state.lyrics[i].timeMs <= p) k = i; else break; }
+  return k;
+}
+
+// ---------- 播放列表（服务器上一份，TA也能往里塞歌） ----------
+// 放完一首按模式接下一首；换歌时、放着的时候每分钟刷一次列表，这样TA刚塞进来的歌能排上。
+let queue = { items: [], currentId: null, mode: 'seq' };
+const queueListeners = new Set();
+let queuePoll = 0;
+function emitQueue(extra) { queueListeners.forEach(fn => { try { fn(queue, extra || null); } catch (_) {} }); }
+export function subscribeQueue(fn) { queueListeners.add(fn); fn(queue, null); return () => queueListeners.delete(fn); }
+export function getQueue() { return queue; }
+function takeQueue(r) {
+  if (r && r.queue && Array.isArray(r.queue.items)) {
+    queue = r.queue;
+    // 列表变了，预取的下一首对不上了就作废，放到结尾前会重新预取
+    if (prefetched && queue.mode !== 'shuffle') { const want = pickNext({ auto: true }); if (!want || want.id !== prefetched.itemId) { prefetched = null; prefetchFor = null; } }
+    emitQueue();
+  }
+  return queue;
+}
+export async function refreshQueue() {
+  try { takeQueue(await apiRequest(API_BASE + '/queue')); } catch (_) {}
+  return queue;
+}
+export async function queueOp(path, body, method) {
+  return takeQueue(await apiRequest(API_BASE + '/queue' + path, { method: method || 'POST', body: body || {} }));
+}
+function startQueuePoll() { clearInterval(queuePoll); queuePoll = setInterval(() => { if (state.playing) refreshQueue(); }, 60000); }
+
+export async function playQueueItem(id, opts) {
+  const item = queue.items.find(x => x.id === id);
+  if (!item) return;
+  state.queueItemId = item.id;
+  queueOp('/current', { id: item.id }).catch(() => {});
+  if (item.addedBy === 'ta') emitQueue({ taAdded: item, taPlayed: !!(opts && opts.taPlayed) });
+  startQueuePoll();
+  await play({ songId: item.songId, title: item.title, artist: item.artist, coverUrl: item.coverUrl, durationMs: item.durationMs }, 0);
+  state.queueItemId = item.id; saveLast(); emit();
+}
+function pickNext(opts) {
+  const items = queue.items;
+  if (!items.length) return null;
+  const at = items.findIndex(x => x.id === (state.queueItemId || queue.currentId));
+  // 顺序放到最后一首，从头再来
+  if (queue.mode === 'one' && opts && opts.auto && at >= 0) return items[at];
+  if (queue.mode === 'shuffle' && items.length > 1) { let k = at; while (k === at) k = Math.floor(Math.random() * items.length); return items[k]; }
+  return items[(at + 1) % items.length];
+}
+let prefetchInflight = null, prefetchWaitFor = null;
+function maybePrefetch() {
+  const p = doPrefetch(); if (p) { prefetchInflight = p; p.finally(() => { if (prefetchInflight === p) prefetchInflight = null; }); }
+  return p;
+}
+async function doPrefetch() {
+  if (!audio || !state.playing || !state.queueItemId || prefetchFor === state.queueItemId) return;
+  const d = durationMs(); if (!d || d - positionMs() > PREFETCH_BEFORE_MS) return;
+  const forItem = prefetchFor = state.queueItemId;
+  await refreshQueue(); // 顺便把TA刚塞进来的歌拿到
+  const target = pickNext({ auto: true });
+  if (!target || state.queueItemId !== forItem) return;
+  try {
+    const [detail, url] = await Promise.all([
+      apiRequest(API_BASE + '/song/' + encodeURIComponent(target.songId)).then(r => r.song),
+      apiRequest(API_BASE + '/song/' + encodeURIComponent(target.songId) + '/url').then(r => r.url)
+    ]);
+    if (state.queueItemId === forItem || prefetchWaitFor === forItem) prefetched = { itemId: target.id, songId: String(target.songId), detail, url, at: Date.now() };
+  } catch (_) {}
+}
+export async function next(opts) {
+  // 自动接下一首：预取时已经刷新过列表、选好了下一首，直接用；手动点下一首才先刷新
+  const auto = !!(opts && opts.auto);
+  // 拖到快结尾时，预取可能刚发出去就放完了：等它回来再接，最多等 6 秒
+  if (auto && prefetchInflight && !prefetched) { prefetchWaitFor = state.queueItemId; await withTimeout(prefetchInflight, 6000).catch(() => {}); prefetchWaitFor = null; }
+  // 预取之后YOU又加了歌/换了模式，预取的那首就不一定是「下一首」了：只有它还是该放的那首才用（随机模式本来就随便挑，照用）
+  if (auto && prefetched && queue.items.some(x => x.id === prefetched.itemId)) {
+    const want = queue.mode === 'shuffle' ? null : pickNext({ auto: true });
+    if (queue.mode === 'shuffle' || (want && want.id === prefetched.itemId)) { await playQueueItem(prefetched.itemId); return; }
+  }
+  if (!auto) await refreshQueue();
+  const items = queue.items;
+  if (!items.length) return;
+  const at = items.findIndex(x => x.id === (state.queueItemId || queue.currentId));
+  let target = null;
+  if (queue.mode === 'one' && opts && opts.auto && at >= 0) target = items[at];
+  else if (queue.mode === 'shuffle' && items.length > 1) { let k = at; while (k === at) k = Math.floor(Math.random() * items.length); target = items[k]; }
+  else target = items[(at + 1) % items.length];
+  if (target) await playQueueItem(target.id);
+}
+export async function setMode(mode) { return queueOp('/mode', { mode }); }
+// 从卡片、搜歌里点开的一首：插进播放列表当前位置、成为当前这首，放完接着放列表。
+// 服务器没接住（断网之类）就退回老样子：单放这一首，不进列表。
+export async function playSingle(song, atMs) {
+  const body = { song: { songId: song.songId, title: song.title, artist: song.artist, coverUrl: song.coverUrl, durationMs: song.durationMs } };
+  // 先开始放，插列表跟它同时进行：别让点一下到出声之间多等一次服务器。
+  state.queueItemId = null;
+  const inserted = queueOp('/now', body).then(q => {
+    const cur = q && q.items.find(x => x.id === q.currentId);
+    return cur && String(cur.songId) === String(song.songId) ? cur.id : null;
+  }).catch(() => null);
+  await play(song, atMs);
+  const id = await inserted;
+  if (id && state.song && String(state.song.songId) === String(song.songId)) { state.queueItemId = id; startQueuePoll(); emit(); }
+}
+// TA直接放的那首：服务器已经把它插进列表、设成当前，
+// 这边刷新列表、按那一项放。YOU正在听就直接切过去；播放器停着时苹果不让自己出声，
+// play() 会留下「点一下播放键开始」，听歌栏上已经摆好这首，YOU点一下就响。
+export async function playFromTa(itemId, song) {
+  await refreshQueue();
+  if (itemId && queue.items.some(x => x.id === itemId)) { await playQueueItem(itemId, { taPlayed: true }); return; }
+  if (song && song.songId) await playSingle(song, 0);
+}
+// 写信挑歌时的试听：只听一下，不进列表。
+export function preview(song) { state.queueItemId = null; return play(song, 0); }
+
+// 当前这首如果是TA（K）放的或排的，返回那一项（带 note），否则 null
+export function taItem() {
+  const id = state.queueItemId; if (!id) return null;
+  const x = (queue.items || []).find(i => i.id === id);
+  return x && x.addedBy === 'ta' ? x : null;
+}

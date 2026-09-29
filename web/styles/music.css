@@ -1,0 +1,240 @@
+/* 分你一只耳机 · 样式。下面这组变量是默认主题：用 :where 写的、优先级为零：你的宿主页面有同名变量就用你的；
+   想换 TA 的颜色，只改 --ta-color（文字/图标）和 --ta-soft（听歌栏底色、歌词页那一行的底色）。 */
+:where(:root){
+  --ta-color:#6f8394; --ta-soft:rgba(238,243,246,.92);
+  --display:"Cormorant Garamond","Noto Serif SC",serif; --secondary:"Bodoni Moda","Noto Serif SC",serif;
+  --ui:"Manrope","Noto Sans SC",sans-serif; --serif-cn:"Noto Serif SC",serif;
+  --paper:#ffffff; --surface:#ffffff; --ink:#29282d; --ink-soft:#55515a; --muted:#8f9098; --line:rgba(40,39,44,.085);
+  --blue:#aebdca; --pink:#cdb4bc; --pink-soft:#f6eef1; --lilac-soft:#f3f1f6;
+  --shadow-soft:0 10px 28px rgba(42,38,46,.065); --page-inline:14px; --top-height:0px;
+  --safe-top:env(safe-area-inset-top,0px); --safe-bottom:env(safe-area-inset-bottom,0px);
+}
+/* 分你一只耳机。按「磨砂关着」那套：纸白、墨色、Noto Serif SC / Cormorant / Manrope，卡片与气泡同构、无描边无阴影。 */
+/* The bar wears the island's clothes : same surface, hairline, soft shadow; glass mode dresses it with the island. */
+.music-mini{position:relative;display:flex;align-items:center;gap:10px;margin:6px var(--page-inline,14px) 4px;height:48px;padding:0 6px 0 6px;border-radius:999px;border:1px solid var(--line);background:var(--surface,#fff);box-shadow:var(--shadow-soft);overflow:hidden;cursor:pointer;-webkit-user-select:none;user-select:none}
+.music-mini[hidden]{display:none}
+/* 跟 island 同一层材质（system-polish.css 的 R2 soft-editorial）：白 .92、无描边、同一道软阴影；磨砂开着时仍由 chat-glass.css 接管 */
+.music-mini{border-color:transparent;background:rgba(255,255,255,.92);box-shadow:0 10px 28px rgba(42,38,46,.065)}
+.music-mini .mm-disc{width:36px;height:36px;border-radius:50%;flex:none;background:#e8e4ea center/cover no-repeat;animation:music-spin 16s linear infinite;animation-play-state:paused}
+.music-mini.is-playing .mm-disc{animation-play-state:running}
+.music-mini .mm-text{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.music-mini .mm-title{font:400 14px/1.3 var(--serif-cn);color:var(--ink)}
+.music-mini .mm-sub{font:400 12px/1.3 var(--serif-cn);color:#aaa6ad;margin-left:5px}
+.music-mini button{width:32px;height:32px;border:0;border-radius:50%;background:none;color:var(--ink);display:grid;place-items:center;cursor:pointer;padding:0;flex:none}
+.music-mini svg,.music-sheet svg,.music-queue svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.music-mini .mm-bar{position:absolute;left:0;bottom:0;height:2px;background:var(--pink);width:0}
+.music-mini .mm-taflash{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:7px;background:#eef3f6;color:#6f8394;font:italic 15px/1 var(--secondary);opacity:0;pointer-events:none;transition:opacity .5s}
+.music-mini .mm-taflash svg{width:20px;height:20px;stroke:var(--blue)}
+.music-mini.k-flash .mm-taflash{opacity:1}
+
+.music-sheet{position:fixed;inset:0;z-index:80;display:flex;flex-direction:column;background:linear-gradient(170deg,hsl(var(--music-hue,200),24%,94%),hsl(var(--music-hue,200),18%,97.5%) 45%,var(--paper));transform:translateY(100%);transition:transform .4s cubic-bezier(.3,.7,.2,1);padding-top:var(--safe-top)}
+.music-sheet.is-open{transform:none}
+.music-sheet .ms-head{display:flex;align-items:center;justify-content:space-between;padding:10px 14px 4px}
+.music-sheet .ms-head button,.music-search .ms-head button{width:40px;height:40px;border:0;background:none;color:var(--ink);display:grid;place-items:center;cursor:pointer}
+.music-sheet .ms-titles{text-align:center;min-width:0;flex:1}
+.music-sheet .ms-title{font:400 17px/1.3 var(--serif-cn);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.music-sheet .ms-artist{font:italic 400 15px/1.3 var(--display);color:var(--muted)}
+.music-sheet .ms-lines{flex:1;overflow-y:auto;padding:28vh 28px 38vh;-webkit-mask-image:linear-gradient(transparent,#000 20%,#000 72%,transparent);mask-image:linear-gradient(transparent,#000 20%,#000 72%,transparent)}
+.music-sheet .ms-ln{position:relative;padding:9px 0;opacity:.36;transition:opacity .3s,transform .3s;cursor:pointer;border-radius:10px}
+.music-sheet .ms-ln .en{font:400 21px/1.3 var(--display);color:var(--ink)}
+.music-sheet .ms-ln .zh{font:400 13px/1.5 var(--serif-cn);color:var(--ink-soft);margin-top:2px}
+.music-sheet .ms-ln.is-cur{opacity:1}
+.music-sheet .ms-ln.is-cur .en{font-size:24px}
+.music-sheet .ms-empty{font:400 14px/1.8 var(--serif-cn);color:var(--muted);text-align:center;padding-top:10vh}
+.music-sheet.is-picking .ms-ln{opacity:.72;padding-left:30px}
+.music-sheet.is-picking .ms-ln::before{content:"";position:absolute;left:0;top:50%;width:18px;height:18px;margin-top:-9px;border-radius:50%;border:1.5px solid var(--muted2)}
+.music-sheet.is-picking .ms-ln.is-picked{opacity:1}
+.music-sheet.is-picking .ms-ln.is-picked::before{background:var(--pink);border-color:var(--pink)}
+.music-sheet .ms-prog{padding:4px 28px 0;touch-action:none}
+.music-sheet .ms-hit{padding:12px 0;margin:-12px 0;cursor:pointer}
+.music-sheet .ms-track{position:relative;height:3px;border-radius:2px;background:rgba(40,39,44,.1)}
+.music-sheet .ms-track i{position:absolute;left:0;top:0;bottom:0;background:var(--ink);border-radius:2px}
+.music-sheet .ms-track b{position:absolute;top:50%;width:13px;height:13px;margin:-6.5px 0 0 -6.5px;border-radius:50%;background:var(--ink);transition:transform .15s}
+.music-sheet .ms-prog.is-drag .ms-track b{transform:scale(1.35)}
+.music-sheet .ms-times{display:flex;justify-content:space-between;font:400 13px/1 var(--display);color:var(--muted);margin-top:7px;font-variant-numeric:tabular-nums}
+.music-sheet .ms-ctr{display:flex;justify-content:center;align-items:center;gap:44px;padding:12px 0 6px}
+.music-sheet .ms-ctr button{border:0;background:none;color:var(--ink);cursor:pointer;display:grid;place-items:center}
+.music-sheet .ms-ctr .ms-big{width:62px;height:62px;border-radius:50%;background:var(--ink);color:#fff}
+.music-sheet .ms-ctr .ms-big svg{width:24px;height:24px}
+.music-sheet .ms-acts,.music-sheet .ms-pickbar{display:flex;justify-content:center;gap:12px;padding:6px 16px calc(18px + var(--safe-bottom,0px))}
+.music-sheet .ms-pickbar{display:none;justify-content:space-between}
+.music-sheet.is-picking .ms-pickbar{display:flex}
+.music-sheet.is-picking .ms-normal{display:none}
+.music-pill{height:38px;padding:0 16px;border:0;border-radius:19px;background:rgba(255,255,255,.86);display:inline-flex;align-items:center;gap:7px;font:400 13px/1 var(--serif-cn);color:var(--ink-soft);cursor:pointer}
+.music-pill svg{width:16px!important;height:16px!important}
+.music-pill.is-go{background:var(--pink);color:#fff}
+.music-note{font:400 12.5px/1.5 var(--ui);color:var(--muted);text-align:center;padding:0 24px 6px;min-height:18px}
+
+.music-search{position:fixed;inset:0;z-index:90;display:flex;flex-direction:column;justify-content:flex-end;background:rgba(40,39,44,.16);opacity:0;pointer-events:none;transition:opacity .25s}
+.music-search.is-open{opacity:1;pointer-events:auto}
+.music-search .msr-sheet{background:var(--paper);border-radius:22px 22px 0 0;padding:12px 16px calc(18px + var(--safe-bottom,0px));height:78vh;max-height:78vh;box-sizing:border-box;display:flex;flex-direction:column;transform:translateY(30px);transition:transform .3s}
+.music-search.is-open .msr-sheet{transform:none}
+.music-search .msr-grab{width:38px;height:4px;border-radius:2px;background:var(--line);margin:0 auto 12px}
+.music-search .msr-list{overflow-y:auto;min-height:0;flex:1 1 auto;-webkit-overflow-scrolling:touch}
+.music-search .msr-row{display:flex;align-items:center;gap:11px;padding:9px 2px;border-bottom:1px solid var(--line);cursor:pointer}
+.music-search .msr-cov{width:42px;height:42px;border-radius:50%;flex:none;background:#e8e4ea center/cover no-repeat}
+.music-search .msr-tt{flex:1;min-width:0}
+.music-search .msr-t{font:400 15px/1.3 var(--serif-cn);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.music-search .msr-a{font:400 12px/1.3 var(--ui);color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.music-search .msr-row button{width:34px;height:34px;border:0;border-radius:50%;background:none;color:var(--ink-soft);display:grid;place-items:center;cursor:pointer}
+.music-search .msr-row svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.music-search .msr-msg{font:400 13px/1.7 var(--serif-cn);color:var(--muted);text-align:center;padding:24px 8px}
+
+/* 聊天里的卡片：跟气泡同构 */
+.music-card{position:relative;text-align:left;display:block;width:272px;max-width:100%;border-radius:18px;background:rgba(247,246,247,.88);cursor:pointer;flex-shrink:0;padding:14px 14px 12px;box-shadow:0 2px 10px rgba(40,39,44,.04)}
+.music-card.is-her{background:var(--pink-soft)}
+.music-card .mc-by{position:absolute;top:12px;right:14px;z-index:3;font:italic 400 11px/1 var(--secondary);letter-spacing:.02em;color:#aaa6ad}
+.music-card .mc-num{font-family:var(--secondary);font-style:italic}
+/* A + B: the record half out of its sleeve, a hundred short lines */
+.mc-vinyl .mc-deck{position:relative;height:112px}
+.mc-vinyl .mc-sleeve{position:absolute;left:0;top:0;width:112px;height:112px;border-radius:6px;background:#e8e4ea center/cover no-repeat;box-shadow:inset 0 0 0 1px rgba(0,0,0,.05),2px 3px 10px rgba(60,40,30,.16);z-index:2}
+.mc-vinyl .mc-disc{position:absolute;left:58px;top:3px;width:106px;height:106px;border-radius:50%;z-index:1;background:radial-gradient(circle,transparent 0 22px,#1d1b1f 22.5px 23.5px,transparent 24px),repeating-radial-gradient(circle,#222024 0 1.2px,#2c292e 1.2px 2.4px);box-shadow:0 3px 10px rgba(0,0,0,.25);transition:left .7s cubic-bezier(.3,1.2,.5,1)}
+.mc-vinyl.on .mc-disc{left:92px;animation:mc-spin 9s linear infinite}
+@keyframes mc-spin{to{transform:rotate(360deg)}}
+.mc-vinyl .mc-label{position:absolute;inset:23px;border-radius:50%;background:#e8e4ea center/cover no-repeat;box-shadow:0 0 0 2px #151316}
+.mc-vinyl .mc-label:after{content:"";position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;background:#f7f5f3}
+.mc-vinyl .mc-t{margin-top:12px;font:500 15px/1.35 var(--serif-cn);color:var(--ink)}
+.mc-vinyl .mc-a{font:400 12.5px/1.35 var(--serif-cn);color:#aaa6ad;margin-top:2px}
+.mc-vinyl .mc-lines100{display:flex;align-items:flex-end;gap:1px;height:18px;margin-top:12px}
+.mc-vinyl .mc-lines100 i{flex:1;height:6px;border-radius:1px;background:rgba(40,39,44,.14)}
+.mc-vinyl .mc-lines100 i:nth-child(10n+1){height:11px}
+.mc-vinyl .mc-lines100 i.p{background:var(--ink)}
+.mc-vinyl .mc-time{display:flex;justify-content:space-between;font-size:11px;color:#aaa6ad;margin-top:6px}
+/* C: a sticky note with a watercolour highlighter */
+.music-card.mc-sticky{border-radius:3px;padding:24px 20px 16px;transform:rotate(1deg);box-shadow:0 1px 1px rgba(0,0,0,.04),0 8px 18px rgba(60,50,40,.10);margin-top:8px}
+.music-card.mc-sticky.is-her{transform:rotate(-1.2deg)}
+.mc-sticky:before{content:"";position:absolute;left:50%;top:-9px;width:74px;height:20px;margin-left:-37px;background:rgba(236,228,214,.8);transform:rotate(-2deg);box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.mc-sticky .mc-by{top:10px;right:12px}
+.mc-sticky .mc-ly{font:400 15px/2 var(--serif-cn);color:var(--ink);isolation:isolate;--hl:var(--blue)}
+.mc-sticky.is-her .mc-ly{--hl:var(--pink)}
+.mc-sticky .mc-ly p{margin:0}
+.mc-sticky .mc-ly .hl{position:relative;z-index:1;padding:0 2px}
+.mc-sticky .mc-ly .hl:before{content:"";position:absolute;left:-4px;right:-6px;top:52%;height:.62em;z-index:-1;border-radius:40% 55% 45% 60%/60% 45% 55% 40%;background:var(--hl);opacity:.6;filter:blur(.5px);transform:rotate(-.8deg) skewX(-6deg)}
+.mc-sticky .mc-ly .tr{font-size:12.5px;line-height:1.5;color:#77717b;margin:-2px 0 6px}
+.mc-sticky .mc-src{display:flex;justify-content:space-between;margin-top:10px;font:400 11.5px/1.3 var(--serif-cn);color:#aaa6ad}
+
+/* 输入框上的挂载 */
+.music-tray{display:flex;gap:8px;overflow-x:auto;padding:0 2px 8px}
+.music-tray:empty{display:none}
+.music-att{position:relative;flex:none;display:flex;align-items:center;gap:8px;padding:6px 30px 6px 6px;border-radius:14px;background:var(--pink-soft);max-width:230px}
+.music-att .ma-ico{width:32px;height:32px;border-radius:50%;flex:none;background:#fff center/cover no-repeat;display:grid;place-items:center;color:var(--pink)}
+.music-att .ma-ico svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.music-att .ma-t{font:400 13px/1.3 var(--serif-cn);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.music-att .ma-a{font:400 11px/1.3 var(--ui);color:var(--muted);white-space:nowrap}
+.music-att .ma-x{position:absolute;right:6px;top:50%;margin-top:-10px;width:20px;height:20px;border:0;border-radius:50%;background:rgba(40,39,44,.08);color:var(--ink-soft);font:400 13px/20px var(--ui);text-align:center;padding:0;cursor:pointer}
+
+/* 聊天页：播放条贴在顶栏下面，不跟着消息滚 */
+[data-chat-overlay] > .music-mini{position:fixed;top:calc(var(--safe-top) + var(--top-height) + 2px);left:0;right:0;z-index:30;margin:0 var(--page-inline,14px)}
+/* ---------- Up next ---------- */
+.music-queue{position:fixed;inset:0;z-index:90;display:flex;flex-direction:column;justify-content:flex-end;background:rgba(40,39,44,.16);opacity:0;pointer-events:none;transition:opacity .25s}
+.music-queue.is-open{opacity:1;pointer-events:auto}
+.music-queue .mq-sheet{background:var(--paper);border-radius:22px 22px 0 0;padding:10px 0 calc(14px + var(--safe-bottom,0px));height:80vh;max-height:80vh;box-sizing:border-box;display:flex;flex-direction:column;transform:translateY(30px);transition:transform .3s}
+.music-queue.is-open .mq-sheet{transform:none}
+.mq-head{display:flex;align-items:center;gap:6px;padding:0 12px 8px 18px}
+.mq-head h3{flex:1;margin:0;font:italic 400 20px/1 var(--secondary);color:var(--ink)}
+.mq-modes{display:flex;background:#f7f6f7;border-radius:999px;padding:2px}
+.mq-modes button{width:34px;height:30px;border:0;border-radius:999px;background:none;color:#aaa6ad;display:grid;place-items:center;padding:0}
+.mq-modes button.on{background:#fff;color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.mq-imp{font:400 12.5px/1 var(--serif-cn);color:#77717b;border:1px solid var(--line);border-radius:999px;background:#fff;padding:7px 11px}
+/* 2026-09-28：列表有几十首时，菜单被按比例缩成一道边、看着像空的。菜单不许缩，要缩只缩列表。 */
+.mq-impmenu{margin:0 14px 8px;border:1px solid var(--line);border-radius:14px;overflow:auto;max-height:36vh;flex-shrink:0}
+.mq-impmenu[hidden]{display:none}
+.mq-impmenu button{display:flex;justify-content:space-between;width:100%;text-align:left;border:0;border-bottom:1px solid var(--line);background:#fff;padding:9px 14px;font:400 13px/1.3 var(--serif-cn);color:var(--ink)}
+.mq-impmenu button:last-child{border-bottom:0}.mq-impmenu small{color:#aaa6ad;margin-left:8px}
+.mq-list{position:relative;overflow:auto;padding:0 6px;-webkit-overflow-scrolling:touch;flex:1 1 auto;min-height:0}
+.mq-row{display:flex;align-items:center;gap:10px;padding:8px;border-radius:14px;background:var(--paper);position:relative;cursor:pointer}
+.mq-row.cur{background:#f7f6f7}
+.mq-row.drag{box-shadow:0 8px 20px rgba(40,39,44,.14);z-index:5}
+.mq-c{width:42px;height:42px;border-radius:8px;flex:none;background:#e8e4ea center/cover no-repeat}
+.mq-m{flex:1;min-width:0}
+.mq-t{display:flex;align-items:center;gap:5px;font:400 14.5px/1.35 var(--serif-cn);color:var(--ink)}
+.mq-t>span:first-of-type{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mq-t svg{width:16px;height:16px;flex:none;stroke:var(--blue)}
+.mq-a{font:400 12px/1.35 var(--serif-cn);color:#aaa6ad;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mq-n{font:400 12px/1.4 var(--serif-cn);color:#6f8394;margin-top:3px}
+.mq-x,.mq-h{width:32px;height:32px;display:grid;place-items:center;border:0;background:none;color:#aaa6ad;padding:0;flex:none}
+.mq-h{touch-action:none;cursor:grab}
+.mq-eq{display:inline-flex;gap:2px;align-items:flex-end;height:12px;margin-left:2px}
+.mq-eq i{width:2px;height:3px;background:var(--ink)}
+.mq-eq.on i{animation:mq-eq 1s ease-in-out infinite}.mq-eq.on i:nth-child(2){animation-delay:.2s}.mq-eq.on i:nth-child(3){animation-delay:.4s}
+@keyframes mq-eq{0%,100%{height:3px}50%{height:12px}}
+.mq-stop{align-self:center;margin-top:10px;border:0;background:none;font:400 12.5px/1 var(--serif-cn);color:#aaa6ad;padding:6px 12px}
+.mq-impmenu .mq-retry{color:#77717b;justify-content:center}
+
+/* 听歌栏右边的 ×：比别的键轻一点，免得误以为是主操作 */
+.music-mini .mm-x{width:28px;height:28px;color:var(--ink)}
+.music-mini .mm-x svg{width:17px;height:17px}
+
+/* 统一搜索栏：一个控件，放大镜在里面，字 14px（原来 15px 的 UI 字体看着愣） */
+.music-searchbar{display:flex;align-items:center;gap:8px;height:38px;border-radius:19px;background:var(--lilac-soft);padding:0 14px;margin-bottom:6px;color:var(--muted);cursor:text}
+.music-searchbar svg{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round}
+.music-searchbar input{flex:1;min-width:0;height:100%;border:0;outline:0;background:none;padding:0;margin:0;font:400 14px/1 var(--serif-cn);color:var(--ink);-webkit-appearance:none;appearance:none}
+.music-searchbar input::placeholder{color:var(--muted)}
+.music-searchbar input::-webkit-search-cancel-button{-webkit-appearance:none}
+/* 导入歌单带封面 */
+.mq-impmenu button{align-items:center;gap:10px}
+.mq-impmenu .mq-plcov{width:34px;height:34px;border-radius:8px;flex:none;background:var(--lilac-soft,#f0ecf3);display:grid;place-items:center;color:#9a8fa0}
+.mq-impmenu .mq-plcov svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round}
+.mq-impmenu .mq-plh{font:400 11px/1 var(--serif-cn);color:var(--muted);padding:12px 4px 6px}
+.mq-impmenu .mq-plname{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Music 入口：搜歌抽屉空着时的首页 */
+.msh-sp{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:6px 0 16px}
+.msh-card{display:flex;flex-direction:column;align-items:stretch;min-width:0;border:0;background:none;padding:0;text-align:left;cursor:pointer;color:var(--ink);transition:opacity .2s}
+.msh-art{position:relative;aspect-ratio:1/1;border-radius:16px;background:#eeeaf0 center/cover no-repeat;box-shadow:0 8px 18px rgba(42,38,46,.12);overflow:hidden}
+.msh-art::before{content:"";position:absolute;inset:0;background:linear-gradient(135deg,rgba(20,16,24,.42),rgba(0,0,0,0) 45%)}
+.msh-art-daily{background-image:linear-gradient(150deg,#f3c9d6,#d995ad)}
+.msh-art-radar{background-image:linear-gradient(150deg,#c9d7ee,#8fa7cf)}
+.msh-dt{position:absolute;z-index:1;top:9px;left:11px;color:#fff;display:flex;align-items:baseline;gap:5px;text-shadow:0 2px 10px rgba(0,0,0,.3)}
+.msh-dt i{font:italic 34px/1 var(--secondary,serif)}
+.msh-dt em{font:normal 10px/1 var(--secondary,serif);letter-spacing:.14em;opacity:.9}
+.msh-play{position:absolute;z-index:1;right:9px;bottom:9px;width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.3);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);display:grid;place-items:center}
+.msh-play svg{width:10px;height:10px;fill:#fff;margin-left:2px}
+.msh-card b{font:500 13.5px/1.25 var(--serif-cn);margin:9px 2px 0}
+.msh-card small{font:400 11px/1.35 var(--serif-cn);color:var(--muted);margin:3px 2px 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msh-h{font:400 11.5px/1 var(--serif-cn);color:var(--muted);margin:6px 2px 6px}
+.msh-pl{display:flex;flex-direction:column;margin-bottom:8px}
+.msh-row{display:flex;align-items:center;gap:10px;border:0;border-bottom:1px solid var(--line);background:none;padding:7px 2px;text-align:left;cursor:pointer;color:var(--ink)}
+.msh-row:last-child{border-bottom:0}
+.msh-cov{width:36px;height:36px;border-radius:9px;flex:none;background:var(--lilac-soft,#f0ecf3);display:grid;place-items:center;color:#9a8fa0}
+.msh-cov svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.5;stroke-linecap:round}
+.msh-name{flex:1;min-width:0;font:400 13px/1.3 var(--serif-cn);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msh-row small{font:400 11px/1 var(--serif-cn);color:#aaa6ad}
+.msh-hint{font:400 11px/1.6 var(--serif-cn);color:var(--muted);text-align:center;padding:12px 8px 4px}
+.msh-card.is-loading,.msh-row.is-loading{opacity:.45;pointer-events:none}
+
+/* 09-29 验收后：导入菜单里的提示字、播放列表的分享键、歌单详情 */
+.mq-impmenu .msr-msg{font:400 12.5px/1.6 var(--serif-cn);color:var(--muted);text-align:center;padding:12px 14px}
+.mq-s{width:32px;height:32px;display:grid;place-items:center;border:0;background:none;color:#aaa6ad;padding:0;flex:none;cursor:pointer}
+.mq-s svg{width:17px!important;height:17px!important}
+.msd-head{display:flex;align-items:center;gap:6px;padding:2px 0 10px;margin-bottom:2px;border-bottom:1px solid var(--line)}
+.msd-back{width:32px;height:32px;border:0;border-radius:50%;background:none;color:var(--ink);display:grid;place-items:center;padding:0;flex:none;cursor:pointer}
+.msd-back svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.msd-tt{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.msd-tt b{font:500 14px/1.25 var(--serif-cn);color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.msd-tt small{font:400 11px/1 var(--serif-cn);color:var(--muted)}
+.msd-all{height:30px;padding:0 12px;font-size:12.5px;gap:5px}
+.msd-all svg{width:12px!important;height:12px!important;fill:currentColor}
+.msd-all.is-loading{opacity:.5;pointer-events:none}
+.msd-top{position:sticky;top:0;z-index:2;background:var(--paper);padding-bottom:4px}
+.msd-top .msd-head{border-bottom:0;padding-bottom:8px}
+.msd-filter{height:34px;margin-bottom:4px}
+.msd-filter input{font-size:13px}
+.msr-row[hidden],.mq-row[hidden]{display:none!important}
+.mq-find{padding:0 14px 6px}
+.mq-find .music-searchbar{height:34px;margin-bottom:0}
+.mq-find .music-searchbar input{font-size:13px}
+.mq-list.is-find .mq-h{visibility:hidden;pointer-events:none}
+.music-search.is-detail .msr-sheet > .music-searchbar{display:none}
+/* TA 放的那首：听歌栏换成 TA 的颜色、标题前 TA 的图标；歌词页歌名下写 TA 那句话。颜色改 :root 里的 --ta-color / --ta-soft */
+.music-mini .mm-ta{display:none;vertical-align:-3px;margin-right:4px;color:var(--ta-color)}
+.music-mini .mm-ta svg{width:16px;height:16px;stroke:currentColor}
+.music-mini.is-ta{background:var(--ta-soft)}
+.music-mini.is-ta .mm-ta{display:inline-block}
+.music-sheet .ms-taline{display:inline-flex;align-items:center;gap:5px;max-width:100%;margin-top:6px;padding:4px 11px;border-radius:999px;background:var(--ta-soft);color:var(--ta-color);font:400 12.5px/1.3 var(--serif-cn)}
+.music-sheet .ms-taline[hidden]{display:none}
+.music-sheet .ms-taline svg{width:14px;height:14px;flex:none;stroke:currentColor;fill:none;stroke-width:1.6}
+.music-sheet .ms-taline span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mq-list.is-dragging .mq-row{transition:transform .16s ease}
+.mq-list.is-dragging .mq-row.drag{transition:none;background:#fff}
+.mq-list.is-dragging{touch-action:none}

@@ -1,0 +1,13 @@
+{
+  "name": "one-earbud",
+  "version": "0.1.0",
+  "description": "分你一只耳机：让你的 AI 伴侣（TA）和你一起听网易云——看得见你在听什么，能给你排歌、直接放歌、发歌卡。",
+  "license": "MIT",
+  "main": "server/example-server.js",
+  "scripts": {
+    "start": "node server/example-server.js",
+    "test": "node --test server/test/*.test.js && node server/test/player-sim.mjs"
+  },
+  "dependencies": { "express": "^4.19.2" },
+  "engines": { "node": ">=18" }
+}
