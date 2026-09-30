@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f4eee5">
+<title>One Ear · Music Player</title>
+<style>
+:root{
+  --paper:#efe7dd;
+  --paper-deep:#e9dfd4;
+  --ink:#4a3930;
+  --muted:#8f8075;
+  --line:#d5c7b8;
+  --fox:#cf7f65;
+  --fox-dark:#a96250;
+  --fox-light:#f5e7d8;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;margin:0;min-height:100%;background:#ddd3c8}
+body{
+  display:flex;justify-content:center;
+  color:var(--ink);
+  font-family:"Noto Serif SC","Songti SC","STSong",Georgia,serif;
+}
+button{border:0;background:none;color:inherit;font:inherit;padding:0}
+.app{
+  width:min(100%,520px);min-height:100vh;overflow:hidden;position:relative;
+  background:
+    radial-gradient(circle at 16% 7%,rgba(255,255,255,.48),transparent 26%),
+    linear-gradient(145deg,#f1e9df,#efe7dd 52%,#e9dfd4);
+}
+.noise{
+  position:absolute;inset:0;pointer-events:none;opacity:.105;mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.18'/%3E%3C/svg%3E");
+}
+.header{
+  height:76px;padding:27px 28px 0;display:flex;align-items:center;justify-content:space-between;
+}
+.header-side{width:54px;color:#765f51}
+.back{font:32px/1 Arial,sans-serif;font-weight:200;transform:translateY(-3px)}
+.header-title{
+  display:flex;align-items:center;gap:13px;
+  color:#77685e;font-size:13px;letter-spacing:5px;
+}
+.header-title:before,.header-title:after{content:"";width:67px;height:1px;background:#cdbfb0}
+.more{font:22px/1 Arial,sans-serif;letter-spacing:3px;color:#806e63}
+.content{padding:0 29px 48px}
+
+.record-stage{
+  height:396px;position:relative;display:grid;place-items:center;
+  margin-top:3px;
+}
+.record{
+  width:305px;height:305px;border-radius:50%;position:relative;z-index:2;
+  background:
+    repeating-radial-gradient(circle at 50% 50%,#141412 0 2px,#20201d 3px 5px,#11110f 6px 7px);
+  box-shadow:0 14px 28px rgba(70,51,38,.16);
+}
+.record.playing{animation:spin 7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.label{
+  position:absolute;inset:62px;border-radius:50%;overflow:hidden;
+  border:5px solid #171716;
+  background:
+    linear-gradient(180deg,#d6bda4 0%,#f0d7b9 47%,#9d8973 48%,#8d7b6b 100%);
+}
+.sun{position:absolute;width:16px;height:16px;border-radius:50%;background:#f9dfbd;left:50%;top:31%;transform:translate(-50%,-50%);box-shadow:0 0 22px #f5d6ad}
+.mountains{
+  position:absolute;left:4%;right:4%;bottom:26%;height:29%;
+  background:
+    linear-gradient(145deg,transparent 0 20%,#81776e 21% 27%,transparent 28%),
+    linear-gradient(35deg,transparent 0 34%,#8f8377 35% 42%,transparent 43%),
+    linear-gradient(158deg,transparent 0 48%,#6f675f 49% 54%,transparent 55%);
+}
+.water{
+  position:absolute;left:9%;right:9%;bottom:8%;height:23%;border-radius:50%;
+  background:repeating-linear-gradient(180deg,rgba(235,215,192,.85) 0 3px,rgba(139,121,105,.25) 4px 6px);
+}
+.tonearm{
+  position:absolute;z-index:5;width:8px;height:193px;right:18px;top:14px;
+  border-radius:8px;background:linear-gradient(90deg,#d7c0a8,#90796a,#eadbca);
+  transform:rotate(18deg);transform-origin:top center;
+}
+.tonearm:before{
+  content:"";position:absolute;width:29px;height:29px;border-radius:50%;
+  left:-10px;top:-10px;background:#f1e5d7;border:5px solid #d6bea6;
+}
+.tonearm:after{
+  content:"";position:absolute;width:25px;height:38px;border-radius:6px;
+  left:-8px;bottom:-4px;background:#e8d9c8;box-shadow:0 0 0 1px #b99d84;
+}
+.branches{position:absolute;inset:auto 5% 9% 4%;height:190px;z-index:1;pointer-events:none}
+.branch{position:absolute;bottom:0;width:1px;background:#b59a85;transform-origin:bottom}
+.branch:nth-child(1){height:152px;left:15%;transform:rotate(-23deg)}
+.branch:nth-child(2){height:135px;left:23%;transform:rotate(-8deg)}
+.branch:nth-child(3){height:120px;right:19%;transform:rotate(14deg)}
+.branch:nth-child(4){height:105px;right:27%;transform:rotate(25deg)}
+.flower{
+  position:absolute;width:8px;height:13px;border:1px solid #c98971;
+  border-radius:70% 20% 70% 20%;transform:rotate(35deg)
+}
+
+.fox{position:absolute}
+.fox-record{width:112px;height:112px;z-index:6;left:43px;bottom:27px}
+.fox-bottom{width:150px;height:150px;margin-left:-13px;align-self:end}
+.fox-progress{position:absolute;width:82px;height:62px;left:36%;bottom:1px;z-index:8;transform:translateX(-50%)}
+
+.fox svg{width:100%;height:100%;overflow:visible}
+.f-body{fill:var(--fox)}
+.f-dark{fill:var(--fox-dark)}
+.f-light{fill:var(--fox-light)}
+.f-line{fill:none;stroke:#5e4035;stroke-linecap:round}
+
+.song-area{display:flex;justify-content:space-between;align-items:flex-start;margin:0 5px}
+.song-title{font-size:35px;line-height:1.15;font-weight:500;letter-spacing:1px;margin:0 0 10px}
+.artist{font:15px/1.2 Arial,sans-serif;letter-spacing:2px;color:#88796e}
+.subtitle{font-size:14px;color:#9a8b7f;letter-spacing:1px;margin-top:22px}
+.together{width:125px;text-align:center;margin-top:4px}
+.avatars{height:50px;display:flex;justify-content:center;align-items:center}
+.avatar{
+  width:48px;height:48px;border-radius:50%;border:2px solid #f0e6da;overflow:hidden;
+  background:linear-gradient(145deg,#d9c5b4,#9c7f70);
+}
+.avatar + .avatar{margin-left:-7px}
+.avatar.one{background:linear-gradient(145deg,#d9c0ae,#9f7968)}
+.avatar.two{background:linear-gradient(145deg,#c9b8aa,#7d675c)}
+.avatar:after{
+  content:"";display:block;width:100%;height:100%;
+  background:
+    radial-gradient(circle at 47% 37%,#5d4a40 0 3px,transparent 4px),
+    radial-gradient(circle at 60% 39%,#5d4a40 0 3px,transparent 4px),
+    radial-gradient(ellipse at 54% 75%,rgba(245,228,211,.85) 0 23%,transparent 24%);
+}
+.together-heart{margin:0 -4px;z-index:3;color:#c77560;font:15px Arial}
+.together small{display:block;color:#8b7a6e;font-size:12px;margin-top:6px}
+.song-actions{display:flex;justify-content:flex-end;gap:23px;margin-top:12px}
+.action{font:28px/1 Arial,sans-serif;color:#715b4e}
+.divider{height:1px;background:var(--line);margin:22px 0 22px}
+
+.lyrics{position:relative;min-height:316px;padding-right:21px}
+.lyrics:after{
+  content:"LYRICS";position:absolute;right:-4px;top:24px;
+  writing-mode:vertical-rl;font:10px Arial,sans-serif;letter-spacing:3px;color:#a08e82
+}
+.lyric{margin:0;color:#8e8177;font-size:17px;line-height:2.2;white-space:pre-wrap}
+.lyric.active{color:var(--fox-dark);font-size:20px;font-weight:600}
+
+.player{margin-top:0}
+.progress{
+  height:4px;background:#d7cdc1;border-radius:8px;position:relative;
+  cursor:pointer
+}
+.progress-fill{height:100%;width:36%;background:var(--fox);border-radius:8px}
+.progress-dot{
+  position:absolute;left:36%;top:50%;width:12px;height:12px;border-radius:50%;
+  background:var(--fox);transform:translate(-50%,-50%)
+}
+.time{display:flex;justify-content:space-between;margin-top:12px;color:#8d7b6f;font:12px Arial,sans-serif}
+.controls{display:grid;grid-template-columns:1fr 1fr 1.45fr 1fr 1fr;align-items:center;gap:13px;margin-top:25px}
+.ctrl{font:26px/1 Arial,sans-serif;color:#624e43}
+.play{
+  width:74px;height:74px;border-radius:50%;margin:auto;
+  display:grid;place-items:center;background:#cf8069;color:#fff;
+  font:27px Arial,sans-serif;box-shadow:0 8px 20px rgba(172,101,80,.18)
+}
+
+.footer{
+  min-height:190px;margin-top:48px;border-top:1px solid var(--line);
+  padding-top:17px;display:flex;align-items:flex-end
+}
+.footer-copy{margin-left:auto;text-align:left;padding:0 5px 29px 16px}
+.footer-en{font:10px Arial,sans-serif;letter-spacing:3px;color:#8b796d}
+.footer-cn{font-size:13px;letter-spacing:3px;margin-top:13px}
+.footer-line{height:1px;background:#cdbfb1;margin-top:12px;width:100%}
+
+.mini{
+  position:fixed;left:50%;bottom:14px;transform:translateX(-50%);
+  width:min(calc(100% - 24px),496px);z-index:20;
+  padding:9px 11px;display:none;align-items:center;gap:11px;
+  border:1px solid #e0d3c6;border-radius:17px;
+  background:rgba(248,242,234,.92);backdrop-filter:blur(18px);
+  box-shadow:0 8px 28px rgba(70,50,37,.09)
+}
+.mini.show{display:flex}
+.mini-cover{width:44px;height:44px;border-radius:9px;background:linear-gradient(145deg,#ddc2a3,#8f786a);background-size:cover;background-position:center}
+.mini-info{min-width:0;flex:1}
+.mini-title{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini-artist{font-size:11px;color:#8d7c70;margin-top:4px}
+.mini-play{width:40px;height:40px;border-radius:50%;background:#cf8069;color:#fff;display:grid;place-items:center}
+
+.queue-mask{position:fixed;inset:0;background:rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:.2s;z-index:90}
+.queue-mask.open{opacity:1;pointer-events:auto}
+.queue-sheet{
+  position:fixed;left:50%;bottom:0;transform:translate(-50%,110%);
+  width:min(100%,520px);max-height:70vh;background:#f8f2ea;
+  border-radius:20px 20px 0 0;padding:16px 20px 28px;z-index:91;
+  transition:transform .25s ease;box-shadow:0 -8px 30px rgba(0,0,0,.15);
+}
+.queue-sheet.open{transform:translate(-50%,0)}
+.queue-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;font-size:15px}
+.queue-close{font-size:22px;color:#888}
+.queue-list{overflow-y:auto;max-height:calc(70vh - 60px)}
+.queue-item{
+  display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+  padding:12px 4px;border-bottom:1px solid var(--line);
+}
+.queue-item.queue-current .queue-song{color:var(--fox-dark);font-weight:600}
+.queue-num{color:#aaa;font:12px Arial;width:20px}
+.queue-copy{display:flex;flex-direction:column}
+.queue-song{font-size:15px}
+.queue-artist{font-size:12px;color:#888;margin-top:2px}
+
+@media(max-width:390px){
+  .content{padding-left:21px;padding-right:21px}
+  .record-stage{height:365px}
+  .record{width:280px;height:280px}.label{inset:57px}
+  .song-title{font-size:31px}
+  .lyrics{min-height:290px}
+}
+button:focus-visible{outline:2px solid rgba(169,98,80,.55);outline-offset:3px}
+</style>
+</head>
+<body>
+<div class="app">
+<div class="noise"></div>
+
+<header class="header">
+  <button class="header-side back" id="back">⌄</button>
+  <div class="header-title">Now Playing</div>
+  <button class="more">···</button>
+</header>
+
+<main class="content">
+<section class="record-stage">
+  <div class="record" id="record">
+    <div class="label">
+      <div class="sun"></div>
+      <div class="mountains"></div>
+      <div class="water"></div>
+    </div>
+    <div class="tonearm"></div>
+  </div>
+
+  <div class="branches">
+    <i class="branch"></i><i class="branch"></i><i class="branch"></i><i class="branch"></i>
+    <i class="flower" style="left:14%;bottom:67%"></i>
+    <i class="flower" style="left:22%;bottom:48%"></i>
+    <i class="flower" style="right:19%;bottom:57%"></i>
+    <i class="flower" style="right:28%;bottom:36%"></i>
+  </div>
+
+  <div class="fox fox-record">
+    <svg viewBox="0 0 120 120">
+      <path class="f-body" d="M26 93c-6-16 0-35 14-45 11-8 24-10 36-5 11 5 19 15 18 28-1 16-15 28-33 29-15 1-29-2-35-7z"/>
+      <path class="f-body" d="M74 86c12-8 21-15 27-27 7 7 10 17 7 27-3 11-12 17-25 18z"/>
+      <path class="f-light" d="M40 57c-1-13 5-27 18-34l5 17 13-10 4 22c-2 13-13 22-27 23-7 0-12-5-13-18z"/>
+      <path class="f-light" d="M52 69c8-6 19-5 26 2-4 10-12 16-23 17-7 0-11-7-3-19z"/>
+      <path class="f-dark" d="M63 52c3-3 8-3 11 0 2 2 2 6-1 8-4 2-9 1-11-2-2-2-2-4 1-6z"/>
+      <circle cx="57" cy="57" r="2.1" fill="#49382f"/><circle cx="73" cy="55" r="2.1" fill="#49382f"/>
+      <path d="M63 63c3 2 6 2 9 0" class="f-line" stroke-width="1.5"/>
+      <path class="f-light" d="M36 91c-10 5-19 3-25-5 11-1 19-7 26-16 7 5 8 14-1 21z"/>
+    </svg>
+  </div>
+</section>
+
+<section class="song-area">
+  <div>
+    <h1 class="song-title" id="songTitle">等待点歌…</h1>
+    <div class="artist" id="artist"></div>
+    <div class="subtitle">AI 排的歌会自动出现在这里</div>
+  </div>
+
+  <div class="together">
+    <div class="avatars">
+      <div class="avatar one"></div><span class="together-heart">♥</span><div class="avatar two"></div>
+    </div>
+    <small>2 人一起听歌</small>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<section class="lyrics" id="lyrics">
+  <p class="lyric active">暂无歌词</p>
+</section>
+
+<section class="player">
+  <div class="progress" id="progress">
+    <div class="progress-fill" id="progressFill"></div>
+    <div class="progress-dot" id="progressDot"></div>
+    <div class="fox fox-progress" id="progressFox">
+      <svg viewBox="0 0 90 70">
+        <path class="f-body" d="M21 49c-3-12 4-25 17-29 12-4 24 2 28 13 4 12-5 23-20 25-11 1-21-3-25-9z"/>
+        <path class="f-body" d="M57 43c11-4 17-11 21-20 7 8 7 17 2 23-5 6-13 8-23 5z"/>
+        <path class="f-light" d="M29 25c0-10 5-18 14-22l3 12 9-7 3 15c-1 9-9 15-18 15-7 0-11-5-11-13z"/>
+        <path class="f-light" d="M10 48c-7 2-10-1-12-7 8 0 13-4 17-9 5 5 3 12-5 16z"/>
+        <circle cx="43" cy="27" r="1.7" fill="#49382f"/><circle cx="52" cy="26" r="1.7" fill="#49382f"/>
+      </svg>
+    </div>
+  </div>
+  <div class="time"><span id="currentTime">00:00</span><span id="duration">00:00</span></div>
+
+  <div class="controls">
+    <button class="ctrl" id="loop">↻</button>
+    <button class="ctrl" id="prev">|◀</button>
+    <button class="play" id="play">▶</button>
+    <button class="ctrl" id="next">▶|</button>
+    <button class="ctrl" id="queueBtn">☷</button>
+  </div>
+</section>
+
+<footer class="footer">
+  <div class="fox fox-bottom">
+    <svg viewBox="0 0 160 160">
+      <path class="f-body" d="M48 133c-9-25 2-50 25-60 18-8 39-4 51 11 13 16 9 39-9 51-19 13-53 12-67-2z"/>
+      <path class="f-body" d="M93 119c20-7 32-20 39-36 12 13 12 30 2 41-10 11-26 14-43 7z"/>
+      <path class="f-light" d="M60 78c-2-19 7-38 25-49l7 22 18-14 4 28c-3 18-18 30-35 30-11 0-18-7-19-17z"/>
+      <path class="f-light" d="M76 96c11-8 25-7 35 3-6 15-18 23-33 23-10 0-15-10-2-26z"/>
+      <path class="f-dark" d="M91 75c4-4 10-4 14 0 3 3 3 7-1 10-5 3-11 2-14-2-2-3-2-6 1-8z"/>
+      <circle cx="84" cy="82" r="2.5" fill="#49382f"/><circle cx="104" cy="79" r="2.5" fill="#49382f"/>
+      <path d="M92 90c4 3 8 3 12 0" class="f-line" stroke-width="2"/>
+      <path class="f-light" d="M54 126c-17 9-31 5-39-8 17-2 28-10 39-23 10 8 13 21 0 31z"/>
+    </svg>
+  </div>
+  <div class="footer-copy">
+    <div class="footer-en">LISTEN TOGETHER</div>
+    <div class="footer-cn">分你一只耳机</div>
+    <div class="footer-line"></div>
+  </div>
+</footer>
+</main>
+
+<div class="mini" id="mini">
+  <div class="mini-cover"></div>
+  <div class="mini-info">
+    <div class="mini-title" id="miniTitle">等待点歌…</div>
+    <div class="mini-artist" id="miniArtist"></div>
+  </div>
+  <button class="mini-play" id="miniPlay">▶</button>
+</div>
+
+<div class="queue-mask" id="queueMask"></div>
+<section class="queue-sheet" id="queueSheet" aria-label="播放队列">
+  <div class="queue-head">
+    <strong>播放队列</strong>
+    <button class="queue-close" id="queueClose" type="button">×</button>
+  </div>
+  <div class="queue-list" id="queueList"></div>
+</section>
+<audio id="audio" preload="auto"></audio>
+</div>
+
+<script>
+const API='https://one-earbud.onrender.com/api/music';
+const TOKEN='';
+const params=new URLSearchParams(location.search);
+const token=params.get('token') || localStorage.getItem('music_token') || TOKEN;
+if(params.get('token')) localStorage.setItem('music_token',params.get('token'));
+
+const audio=document.getElementById('audio');
+const record=document.getElementById('record');
+const playButton=document.getElementById('play');
+const mini=document.getElementById('mini');
+const miniPlay=document.getElementById('miniPlay');
+const miniCover=document.querySelector('.mini-cover');
+const miniTitle=document.getElementById('miniTitle');
+const miniArtist=document.getElementById('miniArtist');
+const progress=document.getElementById('progress');
+const fill=document.getElementById('progressFill');
+const dot=document.getElementById('progressDot');
+const progressFox=document.getElementById('progressFox');
+const title=document.getElementById('songTitle');
+const artist=document.getElementById('artist');
+const currentTime=document.getElementById('currentTime');
+const duration=document.getElementById('duration');
+const queueBtn=document.getElementById('queueBtn');
+const queueSheet=document.getElementById('queueSheet');
+const queueMask=document.getElementById('queueMask');
+const queueList=document.getElementById('queueList');
+const queueClose=document.getElementById('queueClose');
+
+let queue=[];
+let currentId=null;
+let currentIndex=-1;
+let lyrics=[];
+let lyricIndex=-1;
+let loopMode=false;
+
+function authHeaders(extra={}){
+  return token ? {...extra,Authorization:token} : extra;
+}
+async function api(path,options={}){
+  const headers=authHeaders(options.headers||{});
+  const res=await fetch(API+path,{...options,headers});
+  if(!res.ok) throw new Error('HTTP '+res.status);
+  return res.json();
+}
+function formatTime(sec){
+  if(!Number.isFinite(sec)) return '00:00';
+  sec=Math.max(0,Math.floor(sec));
+  return String(Math.floor(sec/60)).padStart(2,'0')+':'+String(sec%60).padStart(2,'0');
+}
+function setPlaying(isPlaying){
+  record.classList.toggle('playing',isPlaying);
+  playButton.textContent=isPlaying?'Ⅱ':'▶';
+  miniPlay.textContent=isPlaying?'Ⅱ':'▶';
+}
+function escapeHTML(text){
+  return String(text).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function setMiniCover(url){
+  if(!miniCover) return;
+  if(url){
+    miniCover.style.backgroundImage=`url("${String(url).replace(/"/g,'%22')}")`;
+    miniCover.style.backgroundSize='cover';
+    miniCover.style.backgroundPosition='center';
+  }else{
+    miniCover.style.backgroundImage='';
+  }
+}
+function renderLyrics(){
+  const box=document.getElementById('lyrics');
+  if(!lyrics.length){
+    box.innerHTML='<p class="lyric active">暂无歌词</p>';
+    lyricIndex=-1;
+    return;
+  }
+  box.innerHTML=lyrics.map((line,i)=>
+    `<p class="lyric" data-index="${i}">${escapeHTML(line.text||'')}</p>`
+  ).join('');
+  lyricIndex=-1;
+}
+function renderQueue(){
+  if(!queue.length){
+    queueList.innerHTML='<div style="padding:20px 4px;color:var(--muted);font-size:13px">暂无播放队列</div>';
+    return;
+  }
+  queueList.innerHTML=queue.map((item,i)=>`
+    <button class="queue-item${item.id===currentId?' queue-current':''}" data-index="${i}" type="button">
+      <span class="queue-num">${i+1}</span>
+      <span class="queue-copy">
+        <span class="queue-song">${escapeHTML(item.title||'未命名歌曲')}</span>
+        <span class="queue-artist">${escapeHTML(item.artist||'')}</span>
+      </span>
+    </button>`).join('');
+  queueList.querySelectorAll('.queue-item').forEach(btn=>{
+    btn.onclick=()=>selectTrackTo(Number(btn.dataset.index));
+  });
+}
+function openQueue(){
+  renderQueue();
+  queueSheet.classList.add('open');
+  queueMask.classList.add('open');
+}
+function closeQueue(){
+  queueSheet.classList.remove('open');
+  queueMask.classList.remove('open');
+}
+async function loadSong(item,auto=true){
+  if(!item) return;
+  title.textContent=item.title||'未命名歌曲';
+  artist.textContent=item.artist||'';
+  miniTitle.textContent=item.title||'';
+  miniArtist.textContent=item.artist||'';
+  setMiniCover(item.coverUrl);
+  mini.classList.add('show');
+
+  try{
+    const [urlData,lyricData]=await Promise.all([
+      api('/song/'+encodeURIComponent(item.songId)+'/url'),
+      api('/song/'+encodeURIComponent(item.songId))
+    ]);
+    lyrics=lyricData.song?.lyrics||[];
+    renderLyrics();
+    if(!urlData.url) throw new Error('No playable URL');
+    audio.src=urlData.url;
+    audio.load();
+    if(auto){
+      try{await audio.play()}catch(e){}
+    }
+  }catch(err){
+    console.warn('loadSong:',err);
+  }
+}
+function updateLyrics(){
+  if(!lyrics.length) return;
+  let index=-1;
+  for(let i=0;i<lyrics.length;i++){
+    if(audio.currentTime*1000>=Number(lyrics[i].timeMs||0)) index=i;
+  }
+  if(index===lyricIndex) return;
+  lyricIndex=index;
+  document.querySelectorAll('.lyric').forEach((el,i)=>{
+    el.classList.toggle('active',i===index);
+  });
+  const active=document.querySelector('.lyric.active');
+  if(active) active.scrollIntoView({block:'nearest',behavior:'smooth'});
+}
+function updateProgress(){
+  const p=audio.duration?audio.currentTime/audio.duration:0;
+  const pct=Math.max(0,Math.min(1,p))*100;
+  fill.style.width=pct+'%';
+  dot.style.left=pct+'%';
+  progressFox.style.left=pct+'%';
+  currentTime.textContent=formatTime(audio.currentTime);
+  duration.textContent=formatTime(audio.duration);
+  updateLyrics();
+}
+async function pollQueue(){
+  try{
+    const data=await api('/queue');
+    const q=data.queue||{};
+    const nextQueue=q.items||[];
+    const id=q.currentId;
+    const changed=id!==currentId;
+    queue=nextQueue;
+    currentIndex=queue.findIndex(item=>item.id===id);
+    if(changed){
+      currentId=id;
+      const item=queue[currentIndex]||queue[0];
+      if(item) await loadSong(item,true);
+    }
+    renderQueue();
+  }catch(err){
+    console.warn('queue:',err);
+  }
+}
+async function selectTrackTo(index){
+  if(index<0 || index>=queue.length) return;
+  currentIndex=index;
+  const item=queue[currentIndex];
+  currentId=item.id;
+  closeQueue();
+  try{
+    await api('/queue/now',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        song:{songId:item.songId,title:item.title,artist:item.artist}
+      })
+    });
+  }catch(err){console.warn('queue/now:',err)}
+  await loadSong(item,true);
+  renderQueue();
+}
+async function selectTrack(delta){
+  if(!queue.length) return;
+  let index=currentIndex;
+  if(index<0) index=0;
+  index=(index+delta+queue.length)%queue.length;
+  await selectTrackTo(index);
+}
+function seekFromEvent(event){
+  const rect=progress.getBoundingClientRect();
+  const ratio=Math.max(0,Math.min(1,(event.clientX-rect.left)/rect.width));
+  if(audio.duration) audio.currentTime=ratio*audio.duration;
+}
+
+playButton.onclick=()=>{
+  if(audio.paused) audio.play().catch(()=>{});
+  else audio.pause();
+};
+miniPlay.onclick=e=>{
+  e.stopPropagation();
+  if(audio.paused) audio.play().catch(()=>{});
+  else audio.pause();
+};
+mini.onclick=e=>{
+  if(e.target.closest('#miniPlay')) return;
+  window.scrollTo({top:0,behavior:'smooth'});
+};
+document.getElementById('prev').onclick=()=>selectTrack(-1);
+document.getElementById('next').onclick=()=>selectTrack(1);
+queueBtn.onclick=openQueue;
+queueClose.onclick=closeQueue;
+queueMask.onclick=closeQueue;
+document.getElementById('loop').onclick=()=>{
+  loopMode=!loopMode;
+  document.getElementById('loop').style.opacity=loopMode?'1':'.65';
+};
+document.querySelector('.more').onclick=openQueue;
+audio.addEventListener('play',()=>setPlaying(true));
+audio.addEventListener('pause',()=>setPlaying(false));
+audio.addEventListener('timeupdate',updateProgress);
+audio.addEventListener('loadedmetadata',updateProgress);
+audio.addEventListener('ended',()=>{
+  if(loopMode){audio.currentTime=0;audio.play().catch(()=>{});return}
+  selectTrack(1);
+});
+progress.addEventListener('click',seekFromEvent);
+document.getElementById('back').onclick=()=>window.scrollTo({top:0,behavior:'smooth'});
+
+setPlaying(false);
+setInterval(pollQueue,2500);
+pollQueue();
+</script>
+</body>
+</html>
